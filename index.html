@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Minimalistischer Kalorien- und Makro-Tracker. Tracke Kalorien, Protein, Kohlenhydrate und Fett - manuell, per Foto-KI, Text-Parser oder Barcode-Scanner.">
+  <title>KCal Tracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="confirm-modal-overlay" id="delete-confirm-modal" aria-hidden="true">
+    <div class="confirm-modal-card">
+      <div class="confirm-icon-wrapper">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </div>
+      <h3 class="confirm-modal-title">Eintrag löschen?</h3>
+      <div class="confirm-modal-item">
+        <div class="confirm-item-name" id="confirm-item-name">Eintrag</div>
+        <div class="confirm-item-meta" id="confirm-item-meta">0 kcal</div>
+      </div>
+      <p class="confirm-modal-desc">Möchtest du diesen Eintrag wirklich entfernen? Diese Aktion kann nicht rückgängig gemacht werden.</p>
+      <div class="confirm-modal-actions">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-delete">Abbrechen</button>
+        <button type="button" class="btn btn-danger-confirm" id="btn-confirm-delete">Löschen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Laden...</div>
+  </div>
+
+  <!-- SVG Defs for gradients -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="calorieGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#00d4ff" />
+        <stop offset="100%" stop-color="#7c3aed" />
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="app">
+
+    <!-- ========== DASHBOARD SCREEN ========== -->
+    <section id="screen-dashboard" class="screen active">
+      <div class="screen-header">
+        <h1>KCal Tracker</h1>
+        <div class="date-nav">
+          <button class="date-nav-btn" id="btn-prev-day" title="Vorheriger Tag">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="date-display" id="date-display-trigger" role="button" tabindex="0" title="Kalender öffnen">
+            <div class="date-main-wrap">
+              <span class="date-main" id="date-main">Heute</span>
+              <span class="date-chevron">▾</span>
+            </div>
+            <div class="date-weekday" id="date-weekday"></div>
+          </div>
+          <button class="date-nav-btn" id="btn-next-day" title="Nächster Tag">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <button class="date-nav-btn date-cal-btn" id="btn-open-calendar-quick" title="Kalender öffnen">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="dashboard-content">
+        <!-- Week Strip (Quick Day Navigation) -->
+        <div class="week-strip-container">
+          <div class="week-strip" id="week-strip"></div>
+        </div>
+
+        <!-- Calorie Ring -->
+        <div class="calorie-hero">
+          <div class="calorie-ring-container">
+            <svg viewBox="0 0 180 180">
+              <circle class="calorie-ring-bg" cx="90" cy="90" r="78" />
+              <circle class="calorie-ring-progress" id="cal-ring" cx="90" cy="90" r="78"
+                stroke-dasharray="490.09" stroke-dashoffset="490.09" />
+            </svg>
+            <div class="calorie-ring-text">
+              <div class="cal-value" id="cal-value">0</div>
+              <div class="cal-label">kcal</div>
+              <div class="cal-goal" id="cal-goal"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Macro Cards -->
+        <div class="macro-cards">
+          <div class="macro-card protein">
+            <div class="macro-value" id="macro-protein">0</div>
+            <div class="macro-unit">g</div>
+            <div class="macro-label">Protein</div>
+            <div class="macro-bar"><div class="macro-bar-fill" id="bar-protein" style="width:0%"></div></div>
+          </div>
+          <div class="macro-card carbs">
+            <div class="macro-value" id="macro-carbs">0</div>
+            <div class="macro-unit">g</div>
+            <div class="macro-label">Carbs</div>
+            <div class="macro-bar"><div class="macro-bar-fill" id="bar-carbs" style="width:0%"></div></div>
+          </div>
+          <div class="macro-card fat">
+            <div class="macro-value" id="macro-fat">0</div>
+            <div class="macro-unit">g</div>
+            <div class="macro-label">Fett</div>
+            <div class="macro-bar"><div class="macro-bar-fill" id="bar-fat" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <!-- Meal List -->
+        <div id="meal-list"></div>
+      </div>
+    </section>
+
+    <!-- ========== CALENDAR SCREEN ========== -->
+    <section id="screen-calendar" class="screen">
+      <div class="screen-header">
+        <div class="calendar-header-row">
+          <h1>Kalender</h1>
+          <button type="button" class="btn-today-pill" id="btn-cal-jump-today">Heute</button>
+        </div>
+        <div class="calendar-month-bar">
+          <button type="button" class="cal-month-nav-btn" id="btn-cal-prev-month" title="Vorheriger Monat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="calendar-month-title" id="calendar-month-title">Oktober 2026</div>
+          <button type="button" class="cal-month-nav-btn" id="btn-cal-next-month" title="Nächster Monat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="calendar-content">
+        <!-- Calendar Card with month grid -->
+        <div class="calendar-card">
+          <div class="calendar-weekdays-row">
+            <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid">
+            <!-- Dynamically generated days -->
+          </div>
+        </div>
+
+        <!-- Selected Day Detail View -->
+        <div class="calendar-day-detail-card" id="calendar-day-detail">
+          <!-- Dynamically generated day summary & meal list -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== ADD SCREEN ========== -->
+    <section id="screen-add" class="screen">
+      <div class="screen-header">
+        <h1>Eintragen</h1>
+      </div>
+
+      <!-- Target Date Banner -->
+      <div class="add-date-banner-wrap">
+        <div class="add-date-banner">
+          <div class="add-date-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Tag:</span>
+          </div>
+          <input type="date" id="add-target-date" class="add-date-input" title="Datum für diesen Eintrag wählen">
+          <button type="button" class="btn-today-pill" id="btn-add-set-today">Heute</button>
+        </div>
+      </div>
+
+      <!-- Method Tabs -->
+      <div class="method-tabs">
+        <button class="method-tab active" data-method="manual">
+          <span class="tab-icon">✏️</span>
+          Manuell
+        </button>
+        <button class="method-tab" data-method="photo">
+          <span class="tab-icon">📸</span>
+          Foto KI
+        </button>
+        <button class="method-tab" data-method="text">
+          <span class="tab-icon">📋</span>
+          Text
+        </button>
+        <button class="method-tab" data-method="barcode">
+          <span class="tab-icon">📱</span>
+          Barcode
+        </button>
+      </div>
+
+      <div class="add-content">
+
+        <!-- ---- Manual Entry ---- -->
+        <div id="method-manual" class="method-panel active">
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-input" id="manual-name" placeholder="z.B. Hähnchen mit Reis">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Kategorie</label>
+            <div class="category-selector" id="manual-category">
+              <button class="cat-btn active" data-cat="breakfast">
+                <span class="cat-emoji">🌅</span>
+                Frühstück
+              </button>
+              <button class="cat-btn" data-cat="lunch">
+                <span class="cat-emoji">☀️</span>
+                Mittag
+              </button>
+              <button class="cat-btn" data-cat="dinner">
+                <span class="cat-emoji">🌙</span>
+                Abend
+              </button>
+              <button class="cat-btn" data-cat="snack">
+                <span class="cat-emoji">🍿</span>
+                Snack
+              </button>
+            </div>
+          </div>
+
+          <div class="macro-input-grid">
+            <div class="macro-input-group">
+              <label class="form-label">
+                <span class="label-dot" style="background:var(--color-calories)"></span>
+                Kalorien
+              </label>
+              <input type="number" class="form-input" id="manual-calories" placeholder="0" min="0" inputmode="numeric">
+              <span class="input-unit">kcal</span>
+            </div>
+            <div class="macro-input-group">
+              <label class="form-label">
+                <span class="label-dot" style="background:var(--color-protein)"></span>
+                Protein
+              </label>
+              <input type="number" class="form-input" id="manual-protein" placeholder="0" min="0" step="0.1" inputmode="decimal">
+              <span class="input-unit">g</span>
+            </div>
+            <div class="macro-input-group">
+              <label class="form-label">
+                <span class="label-dot" style="background:var(--color-carbs)"></span>
+                Kohlenhydrate
+              </label>
+              <input type="number" class="form-input" id="manual-carbs" placeholder="0" min="0" step="0.1" inputmode="decimal">
+              <span class="input-unit">g</span>
+            </div>
+            <div class="macro-input-group">
+              <label class="form-label">
+                <span class="label-dot" style="background:var(--color-fat)"></span>
+                Fett
+              </label>
+              <input type="number" class="form-input" id="manual-fat" placeholder="0" min="0" step="0.1" inputmode="decimal">
+              <span class="input-unit">g</span>
+            </div>
+          </div>
+
+          <button class="btn btn-primary mt-20" id="btn-manual-save">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Speichern
+          </button>
+        </div>
+
+        <!-- ---- Photo KI ---- -->
+        <div id="method-photo" class="method-panel">
+          <div class="photo-area" id="photo-area">
+            <video id="photo-video" autoplay playsinline muted></video>
+            <canvas id="photo-canvas"></canvas>
+            <div class="photo-placeholder" id="photo-placeholder">
+              <span class="placeholder-icon">📸</span>
+              <p>Fotografiere deine Mahlzeit und die KI schätzt die Nährwerte</p>
+            </div>
+            <div class="photo-actions" id="photo-actions" style="display:none">
+              <label class="btn-gallery" for="photo-file-input" title="Aus Galerie wählen">🖼️</label>
+              <button class="btn-capture" id="btn-photo-capture" title="Foto aufnehmen">📸</button>
+            </div>
+          </div>
+
+          <input type="file" accept="image/*" class="file-input-hidden" id="photo-file-input">
+
+          <div class="scanner-controls">
+            <button class="btn btn-secondary" id="btn-photo-start">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+              Kamera starten
+            </button>
+          </div>
+
+          <div class="photo-preview" id="photo-preview">
+            <img id="photo-preview-img" alt="Vorschau">
+            <div class="inline-loading" id="photo-loading" style="display:none">
+              <div class="spinner-sm"></div>
+              <span>KI analysiert dein Foto...</span>
+            </div>
+          </div>
+
+          <div id="photo-results" style="display:none">
+            <div class="results-card">
+              <h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+                KI-Ergebnis
+                <span class="results-badge">Erkannt</span>
+              </h3>
+              <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-input" id="photo-result-name">
+              </div>
+              <div class="macro-input-grid">
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-calories)"></span> Kalorien</label>
+                  <input type="number" class="form-input" id="photo-result-calories" inputmode="numeric">
+                  <span class="input-unit">kcal</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-protein)"></span> Protein</label>
+                  <input type="number" class="form-input" id="photo-result-protein" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-carbs)"></span> Kohlenhydrate</label>
+                  <input type="number" class="form-input" id="photo-result-carbs" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-fat)"></span> Fett</label>
+                  <input type="number" class="form-input" id="photo-result-fat" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+              </div>
+
+              <div class="form-group mt-12">
+                <label class="form-label">Kategorie</label>
+                <div class="category-selector" id="photo-category">
+                  <button class="cat-btn active" data-cat="breakfast"><span class="cat-emoji">🌅</span>Frühstück</button>
+                  <button class="cat-btn" data-cat="lunch"><span class="cat-emoji">☀️</span>Mittag</button>
+                  <button class="cat-btn" data-cat="dinner"><span class="cat-emoji">🌙</span>Abend</button>
+                  <button class="cat-btn" data-cat="snack"><span class="cat-emoji">🍿</span>Snack</button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary mt-12" id="btn-photo-save">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Text Parser ---- -->
+        <div id="method-text" class="method-panel">
+          <div class="form-group">
+            <label class="form-label">Gemini-Text einfügen</label>
+            <textarea class="form-input" id="text-input" rows="6"
+              placeholder="Füge hier den Text von Gemini ein, z.B.:&#10;&#10;Kalorien: 450 kcal&#10;Protein: 35g&#10;Kohlenhydrate: 55g&#10;Fett: 8g"></textarea>
+          </div>
+
+          <button class="btn btn-secondary mb-16" id="btn-text-analyze">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            Analysieren
+          </button>
+
+          <div id="text-results" style="display:none">
+            <div class="results-card">
+              <h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Erkannte Werte
+                <span class="results-badge">Geparst</span>
+              </h3>
+              <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-input" id="text-result-name" placeholder="Name der Mahlzeit">
+              </div>
+              <div class="macro-input-grid">
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-calories)"></span> Kalorien</label>
+                  <input type="number" class="form-input" id="text-result-calories" inputmode="numeric">
+                  <span class="input-unit">kcal</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-protein)"></span> Protein</label>
+                  <input type="number" class="form-input" id="text-result-protein" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-carbs)"></span> Kohlenhydrate</label>
+                  <input type="number" class="form-input" id="text-result-carbs" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+                <div class="macro-input-group">
+                  <label class="form-label"><span class="label-dot" style="background:var(--color-fat)"></span> Fett</label>
+                  <input type="number" class="form-input" id="text-result-fat" inputmode="decimal">
+                  <span class="input-unit">g</span>
+                </div>
+              </div>
+
+              <div class="form-group mt-12">
+                <label class="form-label">Kategorie</label>
+                <div class="category-selector" id="text-category">
+                  <button class="cat-btn active" data-cat="breakfast"><span class="cat-emoji">🌅</span>Frühstück</button>
+                  <button class="cat-btn" data-cat="lunch"><span class="cat-emoji">☀️</span>Mittag</button>
+                  <button class="cat-btn" data-cat="dinner"><span class="cat-emoji">🌙</span>Abend</button>
+                  <button class="cat-btn" data-cat="snack"><span class="cat-emoji">🍿</span>Snack</button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary mt-12" id="btn-text-save">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Barcode Scanner ---- -->
+        <div id="method-barcode" class="method-panel">
+          <div class="barcode-scanner-area" id="barcode-scanner-area">
+            <div id="barcode-reader"></div>
+            <div class="photo-placeholder" id="barcode-placeholder">
+              <span class="placeholder-icon">📱</span>
+              <p>Scanne den Barcode eines Lebensmittels</p>
+            </div>
+          </div>
+
+          <div class="scanner-controls">
+            <button class="btn btn-secondary" id="btn-barcode-start">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="6" y1="8" x2="6" y2="16"></line><line x1="10" y1="8" x2="10" y2="16"></line><line x1="14" y1="8" x2="14" y2="16"></line><line x1="18" y1="8" x2="18" y2="16"></line></svg>
+              Scanner starten
+            </button>
+            <button class="btn btn-secondary hidden" id="btn-barcode-stop">Scanner stoppen</button>
+          </div>
+
+          <div id="barcode-results" style="display:none">
+            <div class="barcode-product" id="barcode-product-card">
+              <div class="barcode-product-header">
+                <img class="barcode-product-img" id="barcode-product-img" alt="" src="">
+                <div class="barcode-product-info">
+                  <h3 id="barcode-product-name">Produktname</h3>
+                  <div class="brand" id="barcode-product-brand">Marke</div>
+                </div>
+              </div>
+
+              <div class="barcode-nutrition-label">Nährwerte pro 100g</div>
+              <div class="barcode-nutrition-grid">
+                <div class="barcode-nutrition-item">
+                  <div class="nutri-value" id="barcode-cal-100" style="color:var(--color-calories)">0</div>
+                  <div class="nutri-label">kcal</div>
+                </div>
+                <div class="barcode-nutrition-item">
+                  <div class="nutri-value" id="barcode-protein-100" style="color:var(--color-protein)">0</div>
+                  <div class="nutri-label">Protein</div>
+                </div>
+                <div class="barcode-nutrition-item">
+                  <div class="nutri-value" id="barcode-carbs-100" style="color:var(--color-carbs)">0</div>
+                  <div class="nutri-label">Carbs</div>
+                </div>
+                <div class="barcode-nutrition-item">
+                  <div class="nutri-value" id="barcode-fat-100" style="color:var(--color-fat)">0</div>
+                  <div class="nutri-label">Fett</div>
+                </div>
+              </div>
+
+              <div class="amount-section">
+                <div class="form-group">
+                  <label class="form-label">Menge (in Gramm)</label>
+                  <input type="number" class="form-input" id="barcode-amount" placeholder="z.B. 150" min="0" inputmode="numeric" value="100">
+                </div>
+
+                <div class="barcode-nutrition-label mt-8">Berechnete Werte</div>
+                <div class="barcode-nutrition-grid">
+                  <div class="barcode-nutrition-item">
+                    <div class="nutri-value" id="barcode-cal-calc" style="color:var(--color-calories)">0</div>
+                    <div class="nutri-label">kcal</div>
+                  </div>
+                  <div class="barcode-nutrition-item">
+                    <div class="nutri-value" id="barcode-protein-calc" style="color:var(--color-protein)">0</div>
+                    <div class="nutri-label">Protein</div>
+                  </div>
+                  <div class="barcode-nutrition-item">
+                    <div class="nutri-value" id="barcode-carbs-calc" style="color:var(--color-carbs)">0</div>
+                    <div class="nutri-label">Carbs</div>
+                  </div>
+                  <div class="barcode-nutrition-item">
+                    <div class="nutri-value" id="barcode-fat-calc" style="color:var(--color-fat)">0</div>
+                    <div class="nutri-label">Fett</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group mt-12">
+                <label class="form-label">Kategorie</label>
+                <div class="category-selector" id="barcode-category">
+                  <button class="cat-btn active" data-cat="breakfast"><span class="cat-emoji">🌅</span>Frühstück</button>
+                  <button class="cat-btn" data-cat="lunch"><span class="cat-emoji">☀️</span>Mittag</button>
+                  <button class="cat-btn" data-cat="dinner"><span class="cat-emoji">🌙</span>Abend</button>
+                  <button class="cat-btn" data-cat="snack"><span class="cat-emoji">🍿</span>Snack</button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary mt-12" id="btn-barcode-save">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========== SETTINGS SCREEN ========== -->
+    <section id="screen-settings" class="screen">
+      <div class="screen-header">
+        <h1>Einstellungen</h1>
+      </div>
+
+      <div class="settings-content">
+        <!-- API Key -->
+        <div class="settings-section">
+          <div class="settings-section-title">🔑 Gemini API Key</div>
+          <div class="settings-card">
+            <div class="form-group">
+              <label class="form-label">API Key</label>
+              <input type="password" class="form-input" id="settings-api-key" placeholder="Deinen Gemini API Key eingeben">
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-save-api-key">Speichern</button>
+          </div>
+        </div>
+
+        <!-- Goals -->
+        <div class="settings-section">
+          <div class="settings-section-title">🎯 Tagesziele (optional)</div>
+          <div class="settings-card">
+            <p style="font-size:0.75rem; color:var(--text-tertiary); margin-bottom:12px;">
+              Lasse Felder leer, wenn du keine Ziele setzen möchtest.
+            </p>
+            <div class="settings-goals-grid">
+              <div class="macro-input-group">
+                <label class="form-label"><span class="label-dot" style="background:var(--color-calories)"></span> Kalorien</label>
+                <input type="number" class="form-input" id="settings-goal-calories" placeholder="—" min="0" inputmode="numeric">
+                <span class="input-unit">kcal</span>
+              </div>
+              <div class="macro-input-group">
+                <label class="form-label"><span class="label-dot" style="background:var(--color-protein)"></span> Protein</label>
+                <input type="number" class="form-input" id="settings-goal-protein" placeholder="—" min="0" inputmode="decimal">
+                <span class="input-unit">g</span>
+              </div>
+              <div class="macro-input-group">
+                <label class="form-label"><span class="label-dot" style="background:var(--color-carbs)"></span> Kohlenhydrate</label>
+                <input type="number" class="form-input" id="settings-goal-carbs" placeholder="—" min="0" inputmode="decimal">
+                <span class="input-unit">g</span>
+              </div>
+              <div class="macro-input-group">
+                <label class="form-label"><span class="label-dot" style="background:var(--color-fat)"></span> Fett</label>
+                <input type="number" class="form-input" id="settings-goal-fat" placeholder="—" min="0" inputmode="decimal">
+                <span class="input-unit">g</span>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm mt-16" id="btn-save-goals">Ziele speichern</button>
+          </div>
+        </div>
+
+        <!-- Data Management -->
+        <div class="settings-section">
+          <div class="settings-section-title">🗑️ Daten</div>
+          <div class="settings-card">
+            <button class="btn btn-danger btn-sm mb-8" id="btn-clear-entries">Alle Einträge löschen</button>
+            <button class="btn btn-danger btn-sm" id="btn-clear-all">Alles zurücksetzen</button>
+          </div>
+        </div>
+
+        <div class="version-info">
+          KCal Tracker v1.0 · Made with ❤️
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ========== BOTTOM NAVIGATION ========== -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-screen="dashboard" id="nav-dashboard">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      <span>Home</span>
+    </button>
+    <button class="nav-btn" data-screen="calendar" id="nav-calendar">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+      <span>Kalender</span>
+    </button>
+    <button class="nav-btn nav-btn-add" data-screen="add" id="nav-add" title="Mahlzeit eintragen">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    </button>
+    <button class="nav-btn" data-screen="settings" id="nav-settings">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- External Libraries -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- App Modules -->
+  <script src="storage.js"></script>
+  <script src="text-parser.js"></script>
+  <script src="ai-photo.js"></script>
+  <script src="scanner.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
