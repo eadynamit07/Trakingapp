@@ -358,6 +358,9 @@ const App = {
   // Photo Entry
   // =====================
   photoBusy: false,
+  photoData: null,
+  photoAttempted: false,
+  photoController: null,
 
   resetPhotoCamera() {
     AIPhoto.stopCamera();
@@ -392,13 +395,20 @@ const App = {
       const photo = AIPhoto.capturePhoto();
       if (!photo) return;
       this.resetPhotoCamera();
-      this.analyzePhoto(photo);
+      this.selectPhoto(photo);
     });
     fileInput.addEventListener('change', async event => {
       const file = event.target.files[0];
       fileInput.value = '';
       if (!file || this.photoBusy) return;
-      await this.analyzePhoto(file);
+      await this.selectPhoto(file);
+    });
+    document.getElementById('btn-photo-analyze').addEventListener('click', () => this.analyzePhoto());
+    document.getElementById('btn-photo-cancel').addEventListener('click', () => this.photoController?.abort());
+    document.getElementById('photo-description').addEventListener('input', () => {
+      document.getElementById('photo-results').style.display = 'none';
+      document.getElementById('photo-error').hidden = true;
+      this.updatePhotoControls();
     });
     document.getElementById('btn-photo-save').addEventListener('click', () => this.saveFromResults('photo'));
   },
@@ -409,33 +419,70 @@ const App = {
     error.hidden = false;
   },
 
-  async analyzePhoto(source) {
+  updatePhotoControls() {
+    document.getElementById('btn-photo-gallery').disabled = this.photoBusy;
+    document.getElementById('photo-description').disabled = this.photoBusy;
+    const analyze = document.getElementById('btn-photo-analyze');
+    analyze.disabled = this.photoBusy || !this.photoData;
+    analyze.textContent = this.photoAttempted ? 'Erneut analysieren' : 'Foto analysieren';
+    document.getElementById('btn-photo-cancel').hidden = !this.photoController;
+    document.getElementById('btn-photo-start').disabled = this.photoBusy || !!AIPhoto.stream;
+  },
+
+  async selectPhoto(source) {
     if (this.photoBusy) return;
     this.photoBusy = true;
     this.resetPhotoCamera();
-    document.getElementById('btn-photo-gallery').disabled = true;
+    this.photoData = null;
+    this.photoAttempted = false;
+    this.updatePhotoControls();
     document.getElementById('photo-error').hidden = true;
     document.getElementById('photo-results').style.display = 'none';
-    const preview = document.getElementById('photo-preview');
+    document.getElementById('photo-preview').classList.remove('active');
     const loading = document.getElementById('photo-loading');
-    preview.classList.add('active');
-    const image = document.getElementById('photo-preview-img');
-    image.hidden = true;
+    document.getElementById('photo-loading-text').textContent = 'Foto wird vorbereitet…';
     loading.style.display = 'flex';
     try {
-      const photo = source instanceof Blob ? await AIPhoto.prepareFile(source) : source;
-      image.src = photo.dataUrl;
-      image.hidden = false;
-      const result = await AIPhoto.analyzePhoto(photo.base64, photo.mimeType);
-      if (result.success) this.showPhotoResults(result.data);
-      else this.showPhotoError(result.error);
+      this.photoData = source instanceof Blob ? await AIPhoto.prepareFile(source) : source;
+      document.getElementById('photo-preview-img').src = this.photoData.dataUrl;
+      document.getElementById('photo-preview').classList.add('active');
     } catch (error) {
       this.showPhotoError(error.message || 'Das Foto konnte nicht verarbeitet werden.');
     } finally {
       this.photoBusy = false;
       loading.style.display = 'none';
-      document.getElementById('btn-photo-gallery').disabled = false;
-      this.resetPhotoCamera();
+      this.updatePhotoControls();
+    }
+  },
+
+  async analyzePhoto() {
+    if (this.photoBusy || !this.photoData) return;
+    this.photoBusy = true;
+    this.resetPhotoCamera();
+    this.photoAttempted = true;
+    this.photoController = new AbortController();
+    this.updatePhotoControls();
+    document.getElementById('photo-error').hidden = true;
+    document.getElementById('photo-results').style.display = 'none';
+    const loading = document.getElementById('photo-loading');
+    const status = document.getElementById('photo-loading-text');
+    status.textContent = 'KI analysiert Foto und Beschreibung…';
+    loading.style.display = 'flex';
+    const description = document.getElementById('photo-description').value.trim();
+    try {
+      const result = await AIPhoto.analyzePhoto(this.photoData.base64, this.photoData.mimeType, description, {
+        signal: this.photoController.signal,
+        onProgress: message => { status.textContent = message; }
+      });
+      if (result.success) this.showPhotoResults(result.data);
+      else this.showPhotoError(result.error);
+    } catch {
+      this.showPhotoError('Die Analyse konnte nicht abgeschlossen werden. Dein Foto bleibt für einen weiteren Versuch erhalten.');
+    } finally {
+      this.photoBusy = false;
+      this.photoController = null;
+      loading.style.display = 'none';
+      this.updatePhotoControls();
     }
   },
 
@@ -516,6 +563,12 @@ const App = {
     document.getElementById(`${prefix}-results`).style.display = 'none';
     if (source === 'photo') {
       document.getElementById('photo-preview').classList.remove('active');
+      document.getElementById('photo-preview-img').removeAttribute('src');
+      document.getElementById('photo-description').value = '';
+      document.getElementById('photo-error').hidden = true;
+      this.photoData = null;
+      this.photoAttempted = false;
+      this.updatePhotoControls();
     } else {
       document.getElementById('text-input').value = '';
     }

@@ -311,14 +311,22 @@
             </button>
           </div>
 
-          <div class="error-message" id="photo-error" role="alert" hidden></div>
-          <div class="photo-preview" id="photo-preview">
-            <img id="photo-preview-img" alt="Vorschau">
-            <div class="inline-loading" id="photo-loading" style="display:none">
-              <div class="spinner-sm"></div>
-              <span>KI analysiert dein Foto...</span>
-            </div>
+          <div class="form-group photo-description-group">
+            <label class="form-label" for="photo-description">Beschreibung (optional)</label>
+            <textarea id="photo-description" class="form-input" rows="3" maxlength="1500" aria-describedby="photo-description-hint" placeholder="z. B. 300 g Kartoffeln, 150 g Kräuterquark und 1 EL Öl. Die Menge reicht für 2 Portionen; ich esse eine davon."></textarea>
+            <p class="settings-note" id="photo-description-hint">Mengen, Zutaten, Öl, Soßen und deine Portion helfen der KI beim Schätzen. Foto und Beschreibung werden erst beim Analysieren an Google gesendet.</p>
           </div>
+          <div class="photo-preview" id="photo-preview">
+            <img id="photo-preview-img" alt="Ausgewähltes Foto deiner Mahlzeit">
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-photo-analyze" disabled>Foto analysieren</button>
+          <div class="inline-loading" id="photo-loading" role="status" aria-live="polite" style="display:none">
+            <div class="spinner-sm"></div>
+            <span id="photo-loading-text">KI analysiert Foto und Beschreibung…</span>
+          </div>
+          <button type="button" class="btn btn-secondary mt-8" id="btn-photo-cancel" hidden>Analyse abbrechen</button>
+          <div class="error-message" id="photo-error" role="alert" hidden></div>
+
 
           <div id="photo-results" style="display:none">
             <div class="results-card">
