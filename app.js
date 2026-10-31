@@ -501,6 +501,12 @@ const App = {
   // Text Parser
   // =====================
   setupTextParser() {
+    document.getElementById('btn-text-ai').addEventListener('click', () => this.analyzeTextWithAI());
+    document.getElementById('btn-text-cancel').addEventListener('click', () => this.textController?.abort());
+    document.getElementById('text-input').addEventListener('input', () => {
+      document.getElementById('text-results').style.display = 'none';
+      document.getElementById('text-error').hidden = true;
+    });
     document.getElementById('btn-text-analyze').addEventListener('click', () => {
       this.analyzeText();
     });
@@ -511,21 +517,72 @@ const App = {
   },
 
   analyzeText() {
+    if (this.textBusy) return;
+    document.getElementById('text-results').style.display = 'none';
+    document.getElementById('text-error').hidden = true;
     const text = document.getElementById('text-input').value;
     const result = TextParser.parse(text);
 
     if (result.success) {
-      const data = result.data;
-      document.getElementById('text-result-name').value = data.name || '';
-      document.getElementById('text-result-calories').value = data.calories || '';
-      document.getElementById('text-result-protein').value = data.protein || '';
-      document.getElementById('text-result-carbs').value = data.carbs || '';
-      document.getElementById('text-result-fat').value = data.fat || '';
-
-      document.getElementById('text-results').style.display = 'block';
+      this.showTextResults(result.data);
       this.showToast('✅ Werte erkannt!', 'success');
     } else {
       this.showToast(result.error, 'error');
+    }
+  },
+
+  showTextResults(data, estimated = false) {
+    for (const key of ['name', 'calories', 'protein', 'carbs', 'fat']) {
+      document.getElementById(`text-result-${key}`).value = data[key] ?? '';
+    }
+    document.getElementById('text-results-badge').textContent = estimated ? 'KI-Schätzung' : 'Geparst';
+    document.getElementById('text-estimate-note').hidden = !estimated;
+    document.getElementById('text-results').style.display = 'block';
+  },
+
+  async analyzeTextWithAI() {
+    if (this.textBusy) return;
+    const input = document.getElementById('text-input');
+    const error = document.getElementById('text-error');
+    const loading = document.getElementById('text-loading');
+    const status = document.getElementById('text-loading-message');
+    const button = document.getElementById('btn-text-ai');
+    const cancel = document.getElementById('btn-text-cancel');
+    const description = input.value.trim();
+    error.hidden = true;
+    document.getElementById('text-results').style.display = 'none';
+    if (!description) {
+      error.textContent = 'Bitte beschreibe zuerst deine Mahlzeit.';
+      error.hidden = false;
+      input.focus();
+      return;
+    }
+    this.textBusy = true;
+    this.textController = new AbortController();
+    input.disabled = button.disabled = document.getElementById('btn-text-analyze').disabled = true;
+    cancel.hidden = false;
+    status.textContent = 'KI schätzt die Nährwerte deiner Mahlzeit…';
+    loading.style.display = 'flex';
+    try {
+      const result = await AIPhoto.analyzeText(description, {
+        signal: this.textController.signal,
+        onProgress: message => { status.textContent = message; }
+      });
+      if (result.success) this.showTextResults(result.data, true);
+      else {
+        error.textContent = result.error;
+        error.hidden = false;
+      }
+    } catch {
+      error.textContent = 'Die Analyse ist fehlgeschlagen. Dein Text bleibt erhalten. Bitte erneut versuchen.';
+      error.hidden = false;
+    } finally {
+      this.textBusy = false;
+      this.textController = null;
+      input.disabled = button.disabled = document.getElementById('btn-text-analyze').disabled = false;
+      button.textContent = 'Erneut analysieren';
+      cancel.hidden = true;
+      loading.style.display = 'none';
     }
   },
 
@@ -571,6 +628,8 @@ const App = {
       this.updatePhotoControls();
     } else {
       document.getElementById('text-input').value = '';
+      document.getElementById('btn-text-ai').textContent = 'An KI senden';
+      document.getElementById('text-error').hidden = true;
     }
 
     this.showToast('✅ Eintrag gespeichert!', 'success');

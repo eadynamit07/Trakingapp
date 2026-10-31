@@ -383,23 +383,32 @@
         <!-- ---- Text Parser ---- -->
         <div id="method-text" class="method-panel">
           <div class="form-group">
-            <label class="form-label">Gemini-Text einfügen</label>
-            <textarea class="form-input" id="text-input" rows="6"
-              placeholder="Füge hier den Text von Gemini ein, z.B.:&#10;&#10;Kalorien: 450 kcal&#10;Protein: 35g&#10;Kohlenhydrate: 55g&#10;Fett: 8g"></textarea>
+            <label class="form-label" for="text-input">Was hast du gegessen?</label>
+            <textarea class="form-input" id="text-input" rows="6" maxlength="4000" aria-describedby="text-hint"
+              placeholder="Zum Beispiel: Hey, ich habe einen Döner mit Hähnchen und Knoblauchsoße gegessen. Schätze mir die Nährwerte.&#10;&#10;Oder füge einen Text mit fertigen Nährwerten ein."></textarea>
+            <p class="settings-note" id="text-hint">Beschreibe dein Essen einfach in eigenen Worten. Mengen und Zutaten helfen beim Schätzen. „An KI senden“ nutzt deinen Gemini API Key aus dem Profil und sendet den Text an Google.</p>
           </div>
 
+          <button type="button" class="btn btn-primary mb-16" id="btn-text-ai">An KI senden</button>
           <button class="btn btn-secondary mb-16" id="btn-text-analyze">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            Analysieren
+            Vorhandene Nährwerte übernehmen
           </button>
+          <div class="inline-loading" id="text-loading" role="status" aria-live="polite" style="display:none">
+            <div class="spinner-sm"></div>
+            <span id="text-loading-message">KI schätzt die Nährwerte deiner Mahlzeit…</span>
+          </div>
+          <button type="button" class="btn btn-secondary mb-16" id="btn-text-cancel" hidden>Analyse abbrechen</button>
+          <div class="error-message" id="text-error" role="alert" hidden></div>
 
           <div id="text-results" style="display:none">
             <div class="results-card">
               <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 Erkannte Werte
-                <span class="results-badge">Geparst</span>
+                <span class="results-badge" id="text-results-badge">Geparst</span>
               </h3>
+              <p class="settings-note" id="text-estimate-note" hidden>Die KI schätzt die Nährwerte für die beschriebene Portion. Ohne Mengenangabe nimmt sie eine übliche Portion an. Prüfe die Werte und passe sie bei Bedarf vor dem Speichern an.</p>
               <div class="form-group">
                 <label class="form-label">Name</label>
                 <input type="text" class="form-input" id="text-result-name" placeholder="Name der Mahlzeit">
