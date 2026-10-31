@@ -2,11 +2,11 @@
   "name": "KCal Tracker",
   "short_name": "KCal",
   "description": "Minimalistischer Kalorien- und Makro-Tracker",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a12",
-  "theme_color": "#0a0a12",
+  "background_color": "#101413",
+  "theme_color": "#101413",
   "icons": [
     {
       "src": "icon-192.png",
@@ -21,5 +21,12 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["health", "fitness", "food"]
+  "categories": [
+    "health",
+    "fitness",
+    "food"
+  ],
+  "id": "./",
+  "scope": "./",
+  "lang": "de"
 }

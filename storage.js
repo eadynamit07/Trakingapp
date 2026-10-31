@@ -9,16 +9,11 @@ const Storage = {
     SETTINGS: 'kcaltracker_settings'
   },
 
-  DEFAULT_API_KEY: 'AQ.Ab8RN6K2it85YDl2AF9MKWzCFBtSeoY7Fc_ef2tb8QUxEalaeg',
+  DEFAULT_API_KEY: '',
 
   // Initialize storage with defaults
   init() {
-    const settings = this.getSettings();
-    if (!settings.apiKey) {
-      settings.apiKey = this.DEFAULT_API_KEY;
-      this.saveSettings(settings);
-    }
-    return settings;
+    return this.getSettings();
   },
 
   // =====================
@@ -51,7 +46,7 @@ const Storage = {
   },
 
   getApiKey() {
-    return this.getSettings().apiKey || this.DEFAULT_API_KEY;
+    return this.getSettings().apiKey || '';
   },
 
   getGoals() {

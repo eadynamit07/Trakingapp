@@ -8,11 +8,14 @@ const AIPhoto = {
   videoElement: null,
   canvasElement: null,
 
+  modelCache: null,
+
   // Initialize camera
   async startCamera(videoEl, canvasEl) {
     this.videoElement = videoEl;
     this.canvasElement = canvasEl;
 
+    this.stopCamera();
     try {
       // Prefer back camera for food photos
       this.stream = await navigator.mediaDevices.getUserMedia({
@@ -26,7 +29,7 @@ const AIPhoto = {
       await this.videoElement.play();
       return { success: true };
     } catch (err) {
-      console.error('Camera error:', err);
+      this.stopCamera();
       return {
         success: false,
         error: 'Kamera-Zugriff fehlgeschlagen. Bitte erlaube den Kamera-Zugriff in den Browser-Einstellungen.'
@@ -47,7 +50,7 @@ const AIPhoto = {
 
   // Capture photo from video stream
   capturePhoto() {
-    if (!this.videoElement || !this.canvasElement) {
+    if (!this.videoElement || !this.canvasElement || !this.videoElement.videoWidth || !this.videoElement.videoHeight) {
       return null;
     }
 
@@ -94,102 +97,102 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
 - Wenn du kein Essen erkennst, antworte: {"name": "Nicht erkannt", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}`;
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Data
-                  }
-                }
-              ]
-            }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 512
-            }
-          })
+      let models = await this.getModels(apiKey);
+      for (let attempt = 0; attempt < Math.min(models.length, 3); attempt++) {
+        const model = models[attempt];
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+            signal: AbortSignal.timeout(60000),
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64Data } }] }],
+              generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json' }
+            })
+          });
+        if (response.status === 404) {
+          this.modelCache = null;
+          continue;
         }
-      );
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error('Gemini API error:', errData);
-        return {
-          success: false,
-          error: `API Fehler (${response.status}): ${errData?.error?.message || 'Unbekannter Fehler'}`
-        };
-      }
-
-      const data = await response.json();
-      const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!textResponse) {
-        return { success: false, error: 'Keine Antwort von der KI erhalten.' };
-      }
-
-      // Parse JSON from response (handle potential markdown code blocks)
-      let jsonStr = textResponse.trim();
-      // Remove markdown code block wrappers if present
-      jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-      jsonStr = jsonStr.trim();
-
-      try {
-        const result = JSON.parse(jsonStr);
-        return {
-          success: true,
-          data: {
-            name: result.name || 'Unbekannt',
-            calories: Math.round(parseFloat(result.calories) || 0),
-            protein: Math.round(parseFloat(result.protein) || 0),
-            carbs: Math.round(parseFloat(result.carbs) || 0),
-            fat: Math.round(parseFloat(result.fat) || 0)
-          }
-        };
-      } catch (parseErr) {
-        // Try to extract values using TextParser as fallback
-        const parsed = TextParser.parse(textResponse);
-        if (parsed.success) {
-          return parsed;
+        if (!response.ok) return { success: false, error: this.apiError(response.status) };
+        const data = await response.json();
+        const text = (data.candidates?.[0]?.content?.parts || [])
+          .filter(part => !part.thought && typeof part.text === 'string')
+          .map(part => part.text).join('').trim();
+        if (!text) return { success: false, error: 'Keine auswertbare Antwort. Bitte versuche ein anderes Foto.' };
+        let result;
+        try { result = JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
+        catch { return { success: false, error: 'Die Nährwerte konnten nicht gelesen werden. Bitte erneut versuchen.' }; }
+        if (!result || typeof result.name !== 'string' || !result.name.trim() ||
+          !['calories', 'protein', 'carbs', 'fat'].every(key => typeof result[key] === 'number' && Number.isFinite(result[key]) && result[key] >= 0)) {
+          return { success: false, error: 'Die KI hat keine gültigen Nährwerte geliefert. Bitte ein anderes Foto wählen.' };
         }
-        return {
-          success: false,
-          error: 'KI-Antwort konnte nicht gelesen werden. Versuche es erneut.'
-        };
+        if (result.name === 'Nicht erkannt') return { success: false, error: 'Kein Essen erkannt. Bitte fotografiere deine Mahlzeit näher.' };
+        return { success: true, data: {
+          name: result.name.trim(), calories: Math.round(result.calories),
+          protein: Math.round(result.protein), carbs: Math.round(result.carbs), fat: Math.round(result.fat)
+        }};
       }
-
-    } catch (err) {
-      console.error('AI analysis error:', err);
-      return {
-        success: false,
-        error: 'Verbindungsfehler. Prüfe deine Internetverbindung.'
-      };
+      return { success: false, error: 'Zurzeit ist kein passendes KI-Modell erreichbar. Bitte später erneut versuchen.' };
+    } catch (error) {
+      return { success: false, error: error.userMessage ||
+        (error.name === 'TimeoutError' ? 'Die Analyse dauert zu lange. Bitte erneut versuchen.' : 'Keine Verbindung zur Fotoanalyse. Prüfe deine Internetverbindung.') };
     }
   },
 
-  // Analyze from file input (gallery)
-  async analyzeFromFile(file) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target.result;
-        const base64 = dataUrl.split(',')[1];
-        const mimeType = file.type || 'image/jpeg';
-        const result = await this.analyzePhoto(base64, mimeType);
-        result.dataUrl = dataUrl;
-        resolve(result);
+  apiError(status) {
+    if (status === 400 || status === 401 || status === 403) return 'Fotoanalyse nicht möglich. Prüfe deinen Gemini API Key und seine Berechtigungen im Profil.';
+    if (status === 429) return 'Dein KI-Limit ist erreicht. Bitte später erneut versuchen oder dein Kontingent prüfen.';
+    if (status >= 500) return 'Der KI-Dienst ist gerade nicht erreichbar. Bitte später erneut versuchen.';
+    return 'Die Fotoanalyse ist fehlgeschlagen. Bitte erneut versuchen.';
+  },
+
+  async getModels(apiKey) {
+    if (this.modelCache?.key === apiKey) return this.modelCache.models;
+    let pageToken = '';
+    const models = [];
+    do {
+      const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+      url.searchParams.set('pageSize', '1000');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const response = await fetch(url, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw { userMessage: this.apiError(response.status) };
+      const data = await response.json();
+      models.push(...(data.models || []).filter(model =>
+        /^models\/gemini-[a-z0-9.-]+$/i.test(model.name) && /flash/.test(model.name) &&
+        !/image|tts|audio|live|native|robotics/.test(model.name) &&
+        model.supportedGenerationMethods?.includes('generateContent')));
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+    models.sort((a, b) => {
+      const score = name => {
+        const version = name.match(/gemini-(\d+(?:\.\d+)?)/);
+        return (version ? Number(version[1]) : 0) * 100 +
+          (/preview|exp/.test(name) ? -1000 : 0) + (/lite/.test(name) ? -1 : 0);
       };
-      reader.onerror = () => {
-        resolve({ success: false, error: 'Datei konnte nicht gelesen werden.' });
-      };
-      reader.readAsDataURL(file);
+      return score(b.name) - score(a.name);
     });
+    if (!models.length) throw { userMessage: 'Für deinen API Key ist kein passendes Foto-Modell verfügbar.' };
+    const names = [...new Set(models.map(model => model.name))];
+    this.modelCache = { key: apiKey, models: names };
+    return names;
+  },
+
+  async prepareFile(file) {
+    if (!file.type.startsWith('image/')) throw new Error('Bitte wähle eine Bilddatei.');
+    if (file.size > 25 * 1024 * 1024) throw new Error('Das Bild ist zu groß. Bitte wähle ein Bild unter 25 MB.');
+    const bitmap = await createImageBitmap(file).catch(() => { throw new Error('Dieses Bildformat konnte nicht geöffnet werden. Bitte JPG, PNG oder WebP verwenden.'); });
+    try {
+      const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      return { dataUrl, base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' };
+    } finally { bitmap.close(); }
   }
 };

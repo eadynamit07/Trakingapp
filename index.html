@@ -2,18 +2,20 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0a12">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#101413">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Minimalistischer Kalorien- und Makro-Tracker. Tracke Kalorien, Protein, Kohlenhydrate und Fett - manuell, per Foto-KI, Text-Parser oder Barcode-Scanner.">
   <title>KCal Tracker</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="android.css">
+  <link rel="icon" type="image/png" href="icon-192.png">
 </head>
 <body>
   <!-- Toast Container -->
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 
   <!-- Delete Confirmation Modal -->
   <div class="confirm-modal-overlay" id="delete-confirm-modal" aria-hidden="true">
@@ -60,7 +62,7 @@
     <!-- ========== DASHBOARD SCREEN ========== -->
     <section id="screen-dashboard" class="screen active">
       <div class="screen-header">
-        <h1>KCal Tracker</h1>
+        <div class="header-eyebrow">DEIN ERNÄHRUNGSTAGEBUCH</div><h1>Dein Überblick</h1>
         <div class="date-nav">
           <button class="date-nav-btn" id="btn-prev-day" title="Vorheriger Tag">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -93,7 +95,7 @@
         </div>
 
         <!-- Calorie Ring -->
-        <div class="calorie-hero">
+        <div class="calorie-hero"><div class="hero-caption">Deine Tagesbilanz</div>
           <div class="calorie-ring-container">
             <svg viewBox="0 0 180 180">
               <circle class="calorie-ring-bg" cx="90" cy="90" r="78" />
@@ -119,7 +121,7 @@
           <div class="macro-card carbs">
             <div class="macro-value" id="macro-carbs">0</div>
             <div class="macro-unit">g</div>
-            <div class="macro-label">Carbs</div>
+            <div class="macro-label">Kohlenhydrate</div>
             <div class="macro-bar"><div class="macro-bar-fill" id="bar-carbs" style="width:0%"></div></div>
           </div>
           <div class="macro-card fat">
@@ -131,7 +133,7 @@
         </div>
 
         <!-- Meal List -->
-        <div id="meal-list"></div>
+        <div class="diary-heading"><h2>Deine Mahlzeiten</h2><button type="button" class="text-action" id="btn-quick-add">+ Hinzufügen</button></div><div id="meal-list"></div>
       </div>
     </section>
 
@@ -174,7 +176,7 @@
     <!-- ========== ADD SCREEN ========== -->
     <section id="screen-add" class="screen">
       <div class="screen-header">
-        <h1>Eintragen</h1>
+        <div class="header-eyebrow">SCHRITT FÜR SCHRITT</div><h1>Mahlzeit hinzufügen</h1>
       </div>
 
       <!-- Target Date Banner -->
@@ -197,19 +199,19 @@
       <!-- Method Tabs -->
       <div class="method-tabs">
         <button class="method-tab active" data-method="manual">
-          <span class="tab-icon">✏️</span>
+          <span class="tab-icon" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-12 12H4v-5zM14 5l5 5"/></svg></span>
           Manuell
         </button>
         <button class="method-tab" data-method="photo">
-          <span class="tab-icon">📸</span>
+          <span class="tab-icon" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h5l2-3h4l2 3h5v15H3z"/><circle cx="12" cy="13" r="4"/></svg></span>
           Foto KI
         </button>
         <button class="method-tab" data-method="text">
-          <span class="tab-icon">📋</span>
+          <span class="tab-icon" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/></svg></span>
           Text
         </button>
         <button class="method-tab" data-method="barcode">
-          <span class="tab-icon">📱</span>
+          <span class="tab-icon" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M17 3h4v4M21 17v4h-4M7 21H3v-4M7 7v10M10 7v10M14 7v10M17 7v10"/></svg></span>
           Barcode
         </button>
       </div>
@@ -289,11 +291,9 @@
         <!-- ---- Photo KI ---- -->
         <div id="method-photo" class="method-panel">
           <div class="photo-area" id="photo-area">
-            <video id="photo-video" autoplay playsinline muted></video>
+            <video id="photo-video" style="display:none" autoplay playsinline muted></video>
             <canvas id="photo-canvas"></canvas>
-            <div class="photo-placeholder" id="photo-placeholder">
-              <span class="placeholder-icon">📸</span>
-              <p>Fotografiere deine Mahlzeit und die KI schätzt die Nährwerte</p>
+            <div class="photo-placeholder" id="photo-placeholder"><span class="placeholder-icon" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h4l2-3h4l2 3h4v14H4z"/><circle cx="12" cy="12" r="4"/></svg></span><h2>Was liegt auf deinem Teller?</h2><p>Foto aufnehmen oder aus der Galerie wählen.<br>Du kannst die geschätzten Werte danach anpassen.</p>
             </div>
             <div class="photo-actions" id="photo-actions" style="display:none">
               <label class="btn-gallery" for="photo-file-input" title="Aus Galerie wählen">🖼️</label>
@@ -304,12 +304,14 @@
           <input type="file" accept="image/*" class="file-input-hidden" id="photo-file-input">
 
           <div class="scanner-controls">
-            <button class="btn btn-secondary" id="btn-photo-start">
+            <button type="button" class="btn btn-secondary" id="btn-photo-gallery">Galerie öffnen</button>
+            <button class="btn btn-primary" id="btn-photo-start">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
               Kamera starten
             </button>
           </div>
 
+          <div class="error-message" id="photo-error" role="alert" hidden></div>
           <div class="photo-preview" id="photo-preview">
             <img id="photo-preview-img" alt="Vorschau">
             <div class="inline-loading" id="photo-loading" style="display:none">
@@ -322,8 +324,8 @@
             <div class="results-card">
               <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
-                KI-Ergebnis
-                <span class="results-badge">Erkannt</span>
+                Geschätzte Nährwerte
+                <span class="results-badge">Bitte prüfen</span>
               </h3>
               <div class="form-group">
                 <label class="form-label">Name</label>
@@ -475,7 +477,7 @@
                 </div>
                 <div class="barcode-nutrition-item">
                   <div class="nutri-value" id="barcode-carbs-100" style="color:var(--color-carbs)">0</div>
-                  <div class="nutri-label">Carbs</div>
+                  <div class="nutri-label">Kohlenhydrate</div>
                 </div>
                 <div class="barcode-nutrition-item">
                   <div class="nutri-value" id="barcode-fat-100" style="color:var(--color-fat)">0</div>
@@ -501,7 +503,7 @@
                   </div>
                   <div class="barcode-nutrition-item">
                     <div class="nutri-value" id="barcode-carbs-calc" style="color:var(--color-carbs)">0</div>
-                    <div class="nutri-label">Carbs</div>
+                    <div class="nutri-label">Kohlenhydrate</div>
                   </div>
                   <div class="barcode-nutrition-item">
                     <div class="nutri-value" id="barcode-fat-calc" style="color:var(--color-fat)">0</div>
@@ -538,6 +540,14 @@
       </div>
 
       <div class="settings-content">
+        <div class="settings-section">
+          <div class="settings-section-title">Auf deinem Smartphone</div>
+          <div class="settings-card install-card">
+            <h2>KCal immer dabei</h2>
+            <p id="install-hint">Öffne diese Seite in Chrome. Wähle im Menü „Zum Startbildschirm hinzufügen“ und dann „Installieren“. Deine Einträge bleiben auf diesem Gerät; die Fotoanalyse benötigt Internet.</p>
+            <button type="button" class="btn btn-primary mt-12" id="btn-install" hidden>App installieren</button>
+          </div>
+        </div>
         <!-- API Key -->
         <div class="settings-section">
           <div class="settings-section-title">🔑 Gemini API Key</div>
@@ -546,7 +556,7 @@
               <label class="form-label">API Key</label>
               <input type="password" class="form-input" id="settings-api-key" placeholder="Deinen Gemini API Key eingeben">
             </div>
-            <button class="btn btn-secondary btn-sm" id="btn-save-api-key">Speichern</button>
+            <p class="settings-note">Für die Fotoanalyse wird dein Bild an Google gesendet. Dein eigener Schlüssel wird nur in diesem Browser gespeichert.</p><button class="btn btn-secondary btn-sm" id="btn-save-api-key">Speichern</button>
           </div>
         </div>
 
@@ -593,7 +603,7 @@
         </div>
 
         <div class="version-info">
-          KCal Tracker v1.0 · Made with ❤️
+          KCal Tracker · Version 2.0
         </div>
       </div>
     </section>
@@ -601,21 +611,21 @@
   </div>
 
   <!-- ========== BOTTOM NAVIGATION ========== -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" aria-label="Hauptnavigation">
     <button class="nav-btn active" data-screen="dashboard" id="nav-dashboard">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-      <span>Home</span>
+      <span>Übersicht</span>
     </button>
     <button class="nav-btn" data-screen="calendar" id="nav-calendar">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
       <span>Kalender</span>
     </button>
-    <button class="nav-btn nav-btn-add" data-screen="add" id="nav-add" title="Mahlzeit eintragen">
+    <button class="nav-btn nav-btn-add" data-screen="add" id="nav-add" aria-label="Mahlzeit hinzufügen" title="Mahlzeit eintragen">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
     </button>
     <button class="nav-btn" data-screen="settings" id="nav-settings">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      <span>Settings</span>
+      <span>Profil</span>
     </button>
   </nav>
 
@@ -628,5 +638,6 @@
   <script src="ai-photo.js"></script>
   <script src="scanner.js"></script>
   <script src="app.js"></script>
+  <script src="android.js"></script>
 </body>
 </html>

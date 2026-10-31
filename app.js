@@ -16,7 +16,7 @@ const App = {
   // Initialization
   // =====================
   init() {
-    // Initialize storage (sets default API key)
+    // Initialize local settings
     Storage.init();
 
     // Set current date to today
@@ -93,7 +93,7 @@ const App = {
   navigateTo(screenId) {
     // Stop any active camera/scanner when leaving
     if (this.currentScreen === 'add') {
-      AIPhoto.stopCamera();
+      this.resetPhotoCamera();
       BarcodeScanner.stop();
     }
 
@@ -296,7 +296,7 @@ const App = {
         document.getElementById(`method-${method}`).classList.add('active');
 
         // Stop camera/scanner when switching tabs
-        AIPhoto.stopCamera();
+        this.resetPhotoCamera();
         BarcodeScanner.stop();
       }
     });
@@ -357,104 +357,85 @@ const App = {
   // =====================
   // Photo Entry
   // =====================
-  setupPhotoEntry() {
-    const btnStart = document.getElementById('btn-photo-start');
-    const btnCapture = document.getElementById('btn-photo-capture');
-    const fileInput = document.getElementById('photo-file-input');
+  photoBusy: false,
 
-    btnStart.addEventListener('click', async () => {
-      const video = document.getElementById('photo-video');
-      const canvas = document.getElementById('photo-canvas');
-      const placeholder = document.getElementById('photo-placeholder');
-      const actions = document.getElementById('photo-actions');
-
-      const result = await AIPhoto.startCamera(video, canvas);
-      if (result.success) {
-        placeholder.style.display = 'none';
-        actions.style.display = 'flex';
-        video.style.display = 'block';
-        btnStart.textContent = 'Kamera läuft...';
-        btnStart.disabled = true;
-      } else {
-        this.showToast(result.error, 'error');
-      }
-    });
-
-    btnCapture.addEventListener('click', async () => {
-      const photo = AIPhoto.capturePhoto();
-      if (!photo) return;
-
-      AIPhoto.stopCamera();
-
-      // Show preview
-      const preview = document.getElementById('photo-preview');
-      const previewImg = document.getElementById('photo-preview-img');
-      preview.classList.add('active');
-      previewImg.src = photo.dataUrl;
-
-      // Hide camera area
-      document.getElementById('photo-actions').style.display = 'none';
-      document.getElementById('photo-video').style.display = 'none';
-      document.getElementById('photo-placeholder').style.display = 'flex';
-      document.getElementById('btn-photo-start').disabled = false;
-      document.getElementById('btn-photo-start').innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-        Kamera starten
-      `;
-
-      // Analyze with AI
-      await this.analyzePhoto(photo.base64, photo.mimeType);
-    });
-
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      AIPhoto.stopCamera();
-
-      // Show loading
-      const photoLoading = document.getElementById('photo-loading');
-      photoLoading.style.display = 'flex';
-
-      const result = await AIPhoto.analyzeFromFile(file);
-
-      photoLoading.style.display = 'none';
-
-      if (result.dataUrl) {
-        const preview = document.getElementById('photo-preview');
-        const previewImg = document.getElementById('photo-preview-img');
-        preview.classList.add('active');
-        previewImg.src = result.dataUrl;
-      }
-
-      if (result.success) {
-        this.showPhotoResults(result.data);
-      } else {
-        this.showToast(result.error, 'error');
-      }
-
-      // Reset file input
-      fileInput.value = '';
-    });
-
-    // Save photo result
-    document.getElementById('btn-photo-save').addEventListener('click', () => {
-      this.saveFromResults('photo');
-    });
+  resetPhotoCamera() {
+    AIPhoto.stopCamera();
+    document.getElementById('photo-actions').style.display = 'none';
+    document.getElementById('photo-video').style.display = 'none';
+    document.getElementById('photo-placeholder').style.display = 'flex';
+    const button = document.getElementById('btn-photo-start');
+    button.disabled = this.photoBusy;
+    button.textContent = 'Kamera starten';
   },
 
-  async analyzePhoto(base64, mimeType) {
+  setupPhotoEntry() {
+    const fileInput = document.getElementById('photo-file-input');
+    document.getElementById('btn-photo-gallery').addEventListener('click', () => fileInput.click());
+    document.getElementById('btn-photo-start').addEventListener('click', async () => {
+      if (this.photoBusy) return;
+      const button = document.getElementById('btn-photo-start');
+      button.disabled = true;
+      const result = await AIPhoto.startCamera(document.getElementById('photo-video'), document.getElementById('photo-canvas'));
+      if (this.currentScreen !== 'add' || !document.getElementById('method-photo').classList.contains('active') || document.hidden) {
+        this.resetPhotoCamera(); return;
+      }
+      if (result.success) {
+        document.getElementById('photo-placeholder').style.display = 'none';
+        document.getElementById('photo-actions').style.display = 'flex';
+        document.getElementById('photo-video').style.display = 'block';
+        button.textContent = 'Kamera läuft';
+      } else { this.resetPhotoCamera(); this.showPhotoError(result.error); }
+    });
+    document.getElementById('btn-photo-capture').addEventListener('click', () => {
+      if (this.photoBusy) return;
+      const photo = AIPhoto.capturePhoto();
+      if (!photo) return;
+      this.resetPhotoCamera();
+      this.analyzePhoto(photo);
+    });
+    fileInput.addEventListener('change', async event => {
+      const file = event.target.files[0];
+      fileInput.value = '';
+      if (!file || this.photoBusy) return;
+      await this.analyzePhoto(file);
+    });
+    document.getElementById('btn-photo-save').addEventListener('click', () => this.saveFromResults('photo'));
+  },
+
+  showPhotoError(message) {
+    const error = document.getElementById('photo-error');
+    error.textContent = message;
+    error.hidden = false;
+  },
+
+  async analyzePhoto(source) {
+    if (this.photoBusy) return;
+    this.photoBusy = true;
+    this.resetPhotoCamera();
+    document.getElementById('btn-photo-gallery').disabled = true;
+    document.getElementById('photo-error').hidden = true;
+    document.getElementById('photo-results').style.display = 'none';
+    const preview = document.getElementById('photo-preview');
     const loading = document.getElementById('photo-loading');
+    preview.classList.add('active');
+    const image = document.getElementById('photo-preview-img');
+    image.hidden = true;
     loading.style.display = 'flex';
-
-    const result = await AIPhoto.analyzePhoto(base64, mimeType);
-
-    loading.style.display = 'none';
-
-    if (result.success) {
-      this.showPhotoResults(result.data);
-    } else {
-      this.showToast(result.error, 'error');
+    try {
+      const photo = source instanceof Blob ? await AIPhoto.prepareFile(source) : source;
+      image.src = photo.dataUrl;
+      image.hidden = false;
+      const result = await AIPhoto.analyzePhoto(photo.base64, photo.mimeType);
+      if (result.success) this.showPhotoResults(result.data);
+      else this.showPhotoError(result.error);
+    } catch (error) {
+      this.showPhotoError(error.message || 'Das Foto konnte nicht verarbeitet werden.');
+    } finally {
+      this.photoBusy = false;
+      loading.style.display = 'none';
+      document.getElementById('btn-photo-gallery').disabled = false;
+      this.resetPhotoCamera();
     }
   },
 
@@ -692,6 +673,7 @@ const App = {
       const key = document.getElementById('settings-api-key').value.trim();
       const settings = Storage.getSettings();
       settings.apiKey = key;
+      AIPhoto.modelCache = null;
       Storage.saveSettings(settings);
       this.showToast('✅ API Key gespeichert!', 'success');
     });
@@ -776,13 +758,13 @@ const App = {
       const hasEntries = totals.calories > 0;
 
       html += `
-        <div class="week-day-pill ${isActive ? 'active' : ''} ${isToday ? 'is-today' : ''} ${hasEntries ? 'has-entries' : ''}" 
+        <button type="button" class="week-day-pill ${isActive ? 'active' : ''} ${isToday ? 'is-today' : ''} ${hasEntries ? 'has-entries' : ''}" 
              onclick="App.selectDate('${dateStr}')" 
              title="${Storage.getDisplayDate(dateStr)}: ${Math.round(totals.calories)} kcal">
           <span class="week-day-name">${dayNames[i]}</span>
           <span class="week-day-num">${dayNum}</span>
           <span class="week-day-indicator"></span>
-        </div>
+        </button>
       `;
     }
 
