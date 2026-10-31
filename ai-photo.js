@@ -11,6 +11,8 @@ const AIPhoto = {
   modelCache: null,
   requestTimeoutMs: 45000,
   analysisTimeoutMs: 100000,
+  textRequestTimeoutMs: 12000,
+  textAnalysisTimeoutMs: 35000,
 
   // Initialize camera
   async startCamera(videoEl, canvasEl) {
@@ -117,27 +119,31 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
     const requestPrompt = prompt + (details ? `\n\nZusätzliche Angaben zur Mahlzeit (Nutzereingabe):\n${JSON.stringify(details)}` : '');
     const parts = [{ text: requestPrompt }];
     if (!textOnly) parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
-    const signals = [AbortSignal.timeout(this.analysisTimeoutMs)];
+    const signals = [AbortSignal.timeout(textOnly ? this.textAnalysisTimeoutMs : this.analysisTimeoutMs)];
     if (signal) signals.push(signal);
     const analysisSignal = AbortSignal.any(signals);
     let lastFailure = 'timeout';
+    let lastResponseError = '';
     try {
-      const models = await this.getModels(apiKey, analysisSignal);
-      const attempts = models.slice(0, 3);
+      if (textOnly) onProgress?.('Verbindung zur KI wird hergestellt…');
+      const discovered = await this.getModels(apiKey, analysisSignal, textOnly ? 8000 : 20000);
+      const models = textOnly ? this.textModels(discovered) : discovered;
+      const attempts = models.slice(0, textOnly ? 2 : 3);
       if (attempts.length === 1) attempts.push(attempts[0]);
       for (let attempt = 0; attempt < attempts.length; attempt++) {
         analysisSignal.throwIfAborted();
         const model = attempts[attempt];
+        lastResponseError = '';
         onProgress?.(attempt === 0 ? (textOnly ? 'KI schätzt die Nährwerte deiner Mahlzeit…' : 'KI analysiert Foto und Beschreibung…') : 'Die KI braucht länger. Ein weiterer Versuch läuft…');
         try {
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-              signal: AbortSignal.any([analysisSignal, AbortSignal.timeout(this.requestTimeoutMs)]),
+              signal: AbortSignal.any([analysisSignal, AbortSignal.timeout(textOnly ? this.textRequestTimeoutMs : this.requestTimeoutMs)]),
               body: JSON.stringify({
                 contents: [{ parts }],
-                generationConfig: this.generationConfig(model)
+                generationConfig: this.generationConfig(model, textOnly)
               })
             });
           if (response.status === 404) {
@@ -147,22 +153,40 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
             continue;
           }
           if (response.status >= 500) { lastFailure = 'service'; continue; }
-          if (!response.ok) return { success: false, error: this.apiError(response.status) };
+          if (!response.ok) {
+            lastResponseError = this.apiError(response.status);
+            // Some models have separate quotas or reject model-specific options.
+            if (textOnly && models.length > 1 && [400, 429].includes(response.status)) continue;
+            return { success: false, error: lastResponseError };
+          }
           const data = await response.json();
           const text = (data.candidates?.[0]?.content?.parts || [])
             .filter(part => !part.thought && typeof part.text === 'string')
             .map(part => part.text).join('').trim();
-          if (!text) return { success: false, error: 'Keine auswertbare Antwort. Bitte beschreibe deine Mahlzeit genauer oder versuche es erneut.' };
+          if (!text) {
+            lastResponseError = data.candidates?.[0]?.finishReason === 'MAX_TOKENS'
+              ? 'Die KI-Antwort wurde abgeschnitten. Bitte erneut analysieren.'
+              : 'Keine auswertbare Antwort. Bitte beschreibe deine Mahlzeit genauer oder versuche es erneut.';
+            if (textOnly && !data.promptFeedback?.blockReason && !['SAFETY', 'RECITATION'].includes(data.candidates?.[0]?.finishReason)) continue;
+            return { success: false, error: lastResponseError };
+          }
           let result;
           try { result = JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
-          catch { return { success: false, error: 'Die Nährwerte konnten nicht gelesen werden. Bitte erneut versuchen.' }; }
+          catch {
+            lastResponseError = 'Die Nährwerte konnten nicht gelesen werden. Bitte erneut versuchen.';
+            if (textOnly) continue;
+            return { success: false, error: lastResponseError };
+          }
           if (!result || typeof result.name !== 'string' || !result.name.trim() ||
             !['calories', 'protein', 'carbs', 'fat'].every(key => typeof result[key] === 'number' && Number.isFinite(result[key]) && result[key] >= 0)) {
             return { success: false, error: 'Die KI hat keine gültigen Nährwerte geliefert. Bitte erneut versuchen.' };
           }
           if (result.name === 'Nicht erkannt') return { success: false, error: textOnly ? 'Kein Essen erkannt. Bitte beschreibe, was du gegessen hast.' : 'Kein Essen erkannt. Bitte fotografiere deine Mahlzeit näher.' };
           // Reuse a responsive model on the next analysis.
-          if (this.modelCache?.key === apiKey) this.modelCache.models = [model, ...models.filter(name => name !== model)];
+          if (this.modelCache?.key === apiKey) {
+            if (textOnly) this.modelCache.textModel = model;
+            else this.modelCache.models = [model, ...models.filter(name => name !== model)];
+          }
           return { success: true, data: {
             name: result.name.trim(), calories: Math.round(result.calories),
             protein: Math.round(result.protein), carbs: Math.round(result.carbs), fat: Math.round(result.fat)
@@ -182,7 +206,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
         service: 'Der KI-Dienst ist gerade überlastet. Bitte später mit „Erneut analysieren“ versuchen.',
         model: 'Zurzeit ist kein passendes KI-Modell erreichbar. Bitte später erneut versuchen.'
       };
-      return { success: false, error: messages[lastFailure] };
+      return { success: false, error: lastResponseError || messages[lastFailure] };
     } catch (error) {
       if (signal?.aborted) return { success: false, error: 'Analyse abgebrochen. Deine Eingaben bleiben erhalten.' };
       return { success: false, error: error.userMessage ||
@@ -190,22 +214,47 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
     }
   },
 
-  generationConfig(model) {
+  textModels(models) {
+    const score = name => (/preview|exp/.test(name) ? -10000 : 0) +
+      (/lite/.test(name) ? 1000 : 0) + Number(name.match(/gemini-(\d+(?:\.\d+)?)/)?.[1] || 0);
+    return [...models].sort((a, b) => {
+      if (a === this.modelCache?.textModel) return -1;
+      if (b === this.modelCache?.textModel) return 1;
+      return score(b) - score(a);
+    });
+  },
+
+  generationConfig(model, textOnly = false) {
     const config = { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json' };
     // https://ai.google.dev/gemini-api/docs/generate-content/thinking
     if (/gemini-[34](?:[.-])/.test(model)) config.thinkingConfig = { thinkingLevel: 'low' };
     else if (/gemini-2\.5[.-]/.test(model)) config.thinkingConfig = { thinkingBudget: 0 };
+    if (textOnly) {
+      // Only request minimal thinking on model families that support it.
+      if (/gemini-3\.(?:1|5)-flash-lite|gemini-3\.[56]-flash|gemini-3-flash/.test(model)) {
+        config.thinkingConfig = { thinkingLevel: 'minimal' };
+      }
+      config.responseSchema = {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' }, calories: { type: 'NUMBER' },
+          protein: { type: 'NUMBER' }, carbs: { type: 'NUMBER' }, fat: { type: 'NUMBER' }
+        },
+        required: ['name', 'calories', 'protein', 'carbs', 'fat']
+      };
+    }
     return config;
   },
 
   apiError(status) {
-    if (status === 400 || status === 401 || status === 403) return 'KI-Analyse nicht möglich. Prüfe deinen Gemini API Key und seine Berechtigungen im Profil.';
-    if (status === 429) return 'Dein KI-Limit ist erreicht. Bitte später erneut versuchen oder dein Kontingent prüfen.';
+    if (status === 400) return 'Google hat die KI-Anfrage abgelehnt (HTTP 400). Mögliche Ursachen sind der API Key oder nicht unterstützte Modelleinstellungen.';
+    if (status === 401 || status === 403) return `KI-Zugriff verweigert (HTTP ${status}). Prüfe deinen Gemini API Key und seine Berechtigungen im Profil.`;
+    if (status === 429) return 'Dein KI-Limit ist erreicht (HTTP 429). Bitte später erneut versuchen oder dein Kontingent in Google AI Studio prüfen.';
     if (status >= 500) return 'Der KI-Dienst ist gerade nicht erreichbar. Bitte später erneut versuchen.';
     return 'Die KI-Analyse ist fehlgeschlagen. Bitte erneut versuchen.';
   },
 
-  async getModels(apiKey, signal) {
+  async getModels(apiKey, signal, timeoutMs = 20000) {
     if (this.modelCache?.key === apiKey) return this.modelCache.models;
     let pageToken = '';
     const models = [];
@@ -213,7 +262,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
       const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
       url.searchParams.set('pageSize', '1000');
       if (pageToken) url.searchParams.set('pageToken', pageToken);
-      const response = await fetch(url, { headers: { 'x-goog-api-key': apiKey }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000) });
+      const response = await fetch(url, { headers: { 'x-goog-api-key': apiKey }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
       if (!response.ok) throw { userMessage: this.apiError(response.status) };
       const data = await response.json();
       models.push(...(data.models || []).filter(model =>

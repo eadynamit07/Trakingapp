@@ -1,5 +1,5 @@
 // All shell URLs are relative to the registration scope (including GitHub Pages).
-const CACHE_NAME = 'kcal-tracker-v4';
+const CACHE_NAME = 'kcal-tracker-v6';
 const SCOPE = self.registration.scope;
 const ASSETS = ['./', 'index.html', 'style.css', 'android.css', 'storage.js',
   'text-parser.js', 'ai-photo.js', 'scanner.js', 'app.js', 'android.js',

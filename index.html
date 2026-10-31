@@ -42,6 +42,31 @@
   </div>
 
   <!-- Loading Overlay -->
+  <dialog class="download-dialog" id="download-dialog" aria-labelledby="download-title" aria-describedby="download-intro">
+    <div class="download-dialog-header">
+      <h2 id="download-title">KCal überall nutzen</h2>
+      <button type="button" class="download-close" id="btn-download-close" aria-label="Anleitung schließen" autofocus>×</button>
+    </div>
+    <p id="download-intro">Nutze KCal direkt im Web oder installiere die App auf deinem Gerät.</p>
+    <section class="download-section" aria-labelledby="download-web-title">
+      <h3 id="download-web-title">Direkt im Browser</h3>
+      <p>Öffne diese Webseite und lege los – eine Installation ist nicht nötig. Speichere sie als Lesezeichen, um schnell zurückzukommen.</p>
+    </section>
+    <section class="download-section" aria-labelledby="download-local-title">
+      <h3 id="download-local-title">Auf deinem Gerät installieren</h3>
+      <ul>
+        <li><strong>Android:</strong> Öffne die Seite in Chrome. Tippe im Menü ⋮ auf „Zum Startbildschirm hinzufügen“ und anschließend auf „Installieren“.</li>
+        <li><strong>iPhone / iPad:</strong> Öffne die Seite in Safari. Wähle „Teilen“ → „Zum Home-Bildschirm“. Aktiviere „Als Web-App öffnen“, falls angeboten, und tippe auf „Hinzufügen“.</li>
+        <li><strong>Computer:</strong> Öffne die Seite in Chrome oder Edge. Klicke auf das Installationssymbol in der Adressleiste oder wähle im Browser-Menü die Option zum Installieren der Seite als App.</li>
+      </ul>
+      <p>Danach startest du KCal über das App-Symbol. Nach dem ersten vollständigen Laden kannst du auch offline manuell Einträge erfassen. KI-Analyse und Barcode-Produktsuche benötigen Internet.</p>
+    </section>
+    <p class="download-storage-note">Deine Einträge bleiben auf diesem Gerät im jeweiligen Browser gespeichert. Es gibt keine automatische Synchronisierung mit anderen Geräten oder Browsern.</p>
+    <p class="settings-note" id="download-install-status" role="status" hidden></p>
+    <button type="button" class="btn btn-primary" id="btn-download-install" hidden>Jetzt installieren</button>
+    <button type="button" class="btn btn-secondary mt-12" id="btn-download-web">Im Web weitermachen</button>
+  </dialog>
+
   <div class="loading-overlay" id="loading-overlay">
     <div class="spinner"></div>
     <div class="loading-text" id="loading-text">Laden...</div>
@@ -58,6 +83,12 @@
   </svg>
 
   <div class="app">
+    <div class="app-topbar">
+      <button type="button" class="download-button" id="btn-download" aria-haspopup="dialog" aria-controls="download-dialog">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg>
+        Download
+      </button>
+    </div>
 
     <!-- ========== DASHBOARD SCREEN ========== -->
     <section id="screen-dashboard" class="screen active">
