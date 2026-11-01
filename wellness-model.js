@@ -81,7 +81,7 @@ const WellnessModel = {
     const draft = {};
     if (!raw.draft || typeof raw.draft !== 'object' || Array.isArray(raw.draft)) throw new Error('Ungültiger Profilentwurf.');
     for (const [key, value] of Object.entries(raw.draft)) {
-      if (!/^(profile|measure)-[a-zA-Z]+$|^coach-input$/.test(key)) throw new Error('Ungültiges Entwurfsfeld.');
+      if (!/^(profile|measure)-[a-zA-Z]+$|^coach-input$|^notice-underage$/.test(key)) throw new Error('Ungültiges Entwurfsfeld.');
       draft[key] = this.text(value, 4000, 'Entwurf');
     }
     let appliedPlan = null;

@@ -51,7 +51,13 @@ Der Verlauf zeigt für jede Messgröße getrennte Kurven und Tagesmediane. Eine 
 
 Quellen: [Mifflin & St Jeor, 1990](https://pubmed.ncbi.nlm.nih.gov/2305711/), [ISSN zu Protein und Training, 2017](https://pubmed.ncbi.nlm.nih.gov/28642676/), [NIDDK zum Anwendungsbereich von Bedarfsrechnern](https://www.niddk.nih.gov/health-information/weight-management/body-weight-planner), [BIA und Hydratation](https://pubmed.ncbi.nlm.nih.gov/12165888/), [Gemini-Bildverarbeitung](https://ai.google.dev/gemini-api/docs/image-understanding).
 
-Für das Update alle Laufzeitdateien gemeinsam veröffentlichen, einschließlich der vier neuen Dateien `wellness-model.js`, `wellness-ai.js`, `wellness.js` und `wellness.css`. `node_modules` und Tests werden nicht benötigt. Im Profil steht anschließend **KCal Tracker · Version 4.0**. Vorhandene App-Fenster nach Abschluss der Veröffentlichung schließen und die App neu öffnen; Browserdaten nicht löschen.
+## Version 4.1: kompakter Fortschrittsbereich
+
+Oben öffnet **⚙ Werte bearbeiten** das Körperprofil. **Schreibe deine Ziele** klappt den Ziel-Assistenten einschließlich Erklärung, Textfeld und Gespräch auf oder zu. Unter **Körperwerte eintragen** öffnen **Manuell** und **Screenshot** jeweils nur das gewählte Formular. Die Eingaben bleiben beim Wechsel erhalten; das Bearbeiten einer Messung öffnet automatisch das manuelle Formular. Zusätzliche Hinweise zu Körperwerten stehen hinter einer eigenen aufklappbaren Erklärung.
+
+Der Hinweis für unter 18-Jährige erscheint ausschließlich bei einem gespeicherten Alter unter 18. Er lässt sich mit **×** schließen; die Auswahl wird lokal und in JSON-Backups gespeichert. Bei einer Änderung des Alters wird sie zurückgesetzt. Das Ausblenden verändert die fachlichen Grenzen des Zielrechners nicht.
+
+Für das Update alle Laufzeitdateien gemeinsam veröffentlichen, einschließlich `wellness-model.js`, `wellness-ai.js`, `wellness.js` und `wellness.css`. `node_modules` und Tests werden nicht benötigt. Im Profil steht anschließend **KCal Tracker · Version 4.1**. Vorhandene App-Fenster nach Abschluss der Veröffentlichung schließen und die App neu öffnen; Browserdaten nicht löschen.
 
 Für die Fotoanalyse im Profil einen eigenen Gemini API Key eintragen. Foto und optionale Beschreibung werden erst beim Tippen auf **Foto analysieren** an Google gesendet. Der bisher im Quelltext enthaltene gemeinsame Schlüssel wurde entfernt; falls er öffentlich veröffentlicht war, sollte er in Google AI Studio widerrufen werden. Bereits gespeicherte Schlüssel werden nicht automatisch gelöscht.
 

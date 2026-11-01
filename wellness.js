@@ -39,6 +39,56 @@ const Wellness = {
     document.getElementById('profile-weightDate').value = Storage.getToday();
     document.getElementById('profile-goal').value = 'maintain';
     for (const id of ['measure-date', 'profile-weightDate']) document.getElementById(id).max = Storage.getToday();
+    this.tidyLayout();
+  },
+  tidyLayout() {
+    const toolbar = document.querySelector('.wellness-intro');
+    const edit = document.getElementById('btn-edit-profile');
+    edit.className = 'wellness-edit-button';
+    edit.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3z"/></svg><span>Werte bearbeiten</span>';
+    toolbar.replaceChildren(edit);
+    toolbar.className = 'wellness-toolbar';
+
+    const heading = document.getElementById('coach-title');
+    const section = heading.closest('section');
+    const panel = document.createElement('div');
+    panel.id = 'coach-panel'; panel.hidden = true;
+    for (const child of [...section.children]) if (child !== heading) panel.appendChild(child);
+    heading.innerHTML = '<button type="button" id="btn-toggle-coach" class="wellness-disclosure" aria-expanded="false" aria-controls="coach-panel"><span>Schreibe deine Ziele</span><span class="disclosure-chevron" aria-hidden="true">⌄</span></button>';
+    section.classList.add('wellness-coach-card');
+    section.appendChild(panel);
+
+    const manual = document.getElementById('measurement-title').closest('section');
+    const screenshot = document.getElementById('screenshot-title').closest('section');
+    const entry = document.createElement('section');
+    entry.id = 'body-entry-section'; entry.className = 'insight-card body-entry-card';
+    entry.setAttribute('aria-labelledby', 'body-entry-title');
+    entry.innerHTML = '<h2 id="body-entry-title">Körperwerte eintragen</h2><div class="body-entry-methods"><button type="button" id="btn-entry-manual" aria-expanded="false" aria-controls="body-entry-manual">Manuell</button><button type="button" id="btn-entry-screenshot" aria-expanded="false" aria-controls="body-entry-screenshot">Screenshot</button></div>';
+    manual.before(entry);
+    for (const [node, mode] of [[manual, 'manual'], [screenshot, 'screenshot']]) {
+      node.classList.remove('insight-card'); node.classList.add('body-entry-panel');
+      node.id = `body-entry-${mode}`; node.hidden = true; entry.appendChild(node);
+    }
+    const bodyNotes = document.getElementById('body-history-title').closest('section').querySelector(':scope > p.settings-note:not([id])');
+    if (bodyNotes) {
+      const details = document.createElement('details'); details.className = 'body-measurement-notes';
+      details.innerHTML = '<summary>Hinweise zu Körperwerten</summary>';
+      bodyNotes.before(details); details.appendChild(bodyNotes);
+    }
+    document.getElementById('personal-plan-title').closest('section').id = 'personal-plan-section';
+  },
+  toggleCoach() {
+    const button = document.getElementById('btn-toggle-coach');
+    const panel = document.getElementById('coach-panel');
+    panel.hidden = !panel.hidden;
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+  },
+  showEntryMethod(mode) {
+    for (const method of ['manual', 'screenshot']) {
+      const open = method === mode;
+      document.getElementById(`body-entry-${method}`).hidden = !open;
+      document.getElementById(`btn-entry-${method}`).setAttribute('aria-expanded', String(open));
+    }
   },
   metricInputs(prefix, row = {}) {
     return Object.entries(WellnessModel.metrics).map(([key, metric]) => `<div><label class="form-label" for="${prefix}-${key}">${metric.label} (${metric.unit})</label><input type="number" id="${prefix}-${key}" data-metric="${key}" class="form-input" min="${metric.min}" max="${metric.max}" step="0.1" inputmode="decimal" value="${row[key] ?? ''}"></div>`).join('');
@@ -46,6 +96,17 @@ const Wellness = {
   bind() {
     const click = (id, fn, errorId) => document.getElementById(id).addEventListener('click', () => this.act(fn, errorId));
     click('btn-edit-profile', () => this.openProfile());
+    click('btn-toggle-coach', () => this.toggleCoach());
+    for (const mode of ['manual', 'screenshot']) click(`btn-entry-${mode}`, () => {
+      const open = document.getElementById(`btn-entry-${mode}`).getAttribute('aria-expanded') === 'true';
+      this.showEntryMethod(open ? null : mode);
+    });
+    document.getElementById('personal-plan').addEventListener('click', event => {
+      if (event.target.closest('#btn-dismiss-underage')) this.act(async () => {
+        await Storage.saveWellnessDraft('notice-underage', 'true');
+        this.render();
+      });
+    });
     click('btn-settings-body', () => App.navigateTo('body'));
     click('btn-profile-close', () => this.skipProfile(), 'profile-error');
     click('btn-profile-skip', () => this.skipProfile(), 'profile-error');
@@ -121,6 +182,9 @@ const Wellness = {
     document.getElementById('profile-weightDate').value = Storage.getToday();
     this.resetMeasurement(false);
     this.suggestedGoal = null; this.pendingRows = []; this.files = [];
+    this.showEntryMethod(null);
+    document.getElementById('coach-panel').hidden = true;
+    document.getElementById('btn-toggle-coach').setAttribute('aria-expanded', 'false');
     this.releasePreviews();
     document.getElementById('screenshot-previews').replaceChildren();
     document.getElementById('screenshot-count').textContent = '';
@@ -223,10 +287,20 @@ const Wellness = {
   renderPlan(state) {
     const container = document.getElementById('personal-plan'), apply = document.getElementById('btn-apply-plan');
     apply.hidden = true;
+    document.getElementById('personal-plan-section').hidden = false;
     document.getElementById('plan-applied-status').textContent = '';
     if (!state.profile) { container.innerHTML = '<p class="settings-note">Bitte zuerst dein Körperprofil einrichten. Du kannst die App auch mit eigenen Tageszielen nutzen.</p>'; return; }
     const plan = WellnessModel.plan(state.profile, state.measurements);
-    if (!plan.eligible) { container.innerHTML = `<p class="plausibility-warning">${this.esc(plan.reason)}</p>`; return; }
+    if (!plan.eligible) {
+      const underage = state.profile.age < 18;
+      if (underage && state.draft['notice-underage'] === 'true') {
+        container.replaceChildren();
+        document.getElementById('personal-plan-section').hidden = true;
+        return;
+      }
+      container.innerHTML = `<div class="plausibility-warning ${underage ? 'dismissible-notice' : ''}" role="status">${underage ? '<button type="button" id="btn-dismiss-underage" class="notice-close" aria-label="Hinweis für unter 18-Jährige schließen">×</button>' : ''}<p>${this.esc(plan.reason)}</p></div>`;
+      return;
+    }
     const goals = plan.goals;
     container.innerHTML = `<div class="personal-calorie-target"><strong>${this.format(goals.calories)}</strong><span>kcal pro Tag · Startvorschlag</span></div><div class="plan-macros">${[['protein', 'Protein'], ['carbs', 'Kohlenhydrate'], ['fat', 'Fett']].map(([key, label]) => `<div><strong>${this.format(goals[key], 'g')}</strong><span>${label}</span></div>`).join('')}</div><p>${this.esc(WellnessModel.goals[plan.goal])} · ${plan.adjustment >= 0 ? '+' : ''}${this.format(plan.adjustment, 'kcal')} zum geschätzten Erhalt.</p><p class="settings-note">Berechnet mit ${this.format(plan.weight.value, 'kg')} vom ${this.esc(Storage.getDisplayDate(plan.weight.date))}. Ruhebedarf ca. ${this.format(plan.bmr, 'kcal')}, Aktivitätsfaktor ${plan.factor.toLocaleString('de-DE', { maximumFractionDigits: 3 })}, Erhalt ca. ${this.format(plan.maintenance, 'kcal')}. Grobe Erhaltsspanne ${this.format(plan.range[0])}–${this.format(plan.range[1], 'kcal')}; tatsächlicher Bedarf kann stärker abweichen.</p><p class="settings-note">Beobachte Energie, Trainingsleistung und mehrere Wochen Verlauf. Schwankende BIA-Werte führen nicht automatisch zu einer Kalorienänderung.</p>`;
     apply.hidden = false;
@@ -303,6 +377,7 @@ const Wellness = {
   },
   editMeasurement(id) {
     const row = Storage.getWellness().measurements.find(item => item.id === id); if (!row) return;
+    this.showEntryMethod('manual');
     for (const [key, value] of Object.entries(row)) {
       const input = document.getElementById(`measure-${key}`); if (input) { input.value = value ?? ''; this.act(() => this.persistField(input)); }
     }

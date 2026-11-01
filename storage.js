@@ -122,13 +122,14 @@ const Storage = {
   clearAll() { return this.commit(() => this.defaults()); },
   getWellness() { return structuredClone(this.state.wellness); },
   saveWellnessDraft(key, value) {
-    if (!/^(profile|measure)-[a-zA-Z]+$|^coach-input$/.test(key)) return Promise.reject(new Error('Ungültiges Entwurfsfeld.'));
+    if (!/^(profile|measure)-[a-zA-Z]+$|^coach-input$|^notice-underage$/.test(key)) return Promise.reject(new Error('Ungültiges Entwurfsfeld.'));
     const text = WellnessModel.text(String(value), 4000, 'Entwurf');
     return this.commit(state => { state.wellness.draft[key] = text; return state; }, 'draft');
   },
   saveProfile(raw) {
     const profile = WellnessModel.profile(raw);
     return this.commit(state => {
+      if (state.wellness.profile?.age !== profile.age) delete state.wellness.draft['notice-underage'];
       state.wellness.profile = profile;
       for (const key of Object.keys(state.wellness.draft)) if (key.startsWith('profile-')) delete state.wellness.draft[key];
       return state;

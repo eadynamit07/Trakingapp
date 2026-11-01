@@ -9,6 +9,27 @@
 .wellness-content textarea, .wellness-dialog textarea { resize: vertical; }
 .wellness-eyebrow { font-size: .65rem; letter-spacing: 1.8px; color: var(--accent-cyan); font-weight: 650; margin-bottom: 10px; }
 .wellness-intro { padding: 22px 18px; background: linear-gradient(130deg, #21362a, var(--bg-card)); }
+.wellness-toolbar { display: flex; justify-content: flex-end; margin: -2px 0 16px; }
+.wellness-edit-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 12px; font: inherit; font-size: .8rem; }
+.wellness-edit-button:hover { background: var(--bg-card); color: var(--accent-cyan); }
+.wellness-coach-card { padding: 0; }
+.wellness-coach-card > h2 { margin: 0; }
+.wellness-disclosure { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 58px; padding: 16px; text-align: left; color: var(--text-primary); font: inherit; font-size: 1rem; font-weight: 600; }
+.disclosure-chevron { color: var(--accent-cyan); font-size: 1.3rem; transition: transform .18s ease; }
+.wellness-disclosure[aria-expanded="true"] .disclosure-chevron { transform: rotate(180deg); }
+#coach-panel { padding: 0 16px 16px; }
+.body-entry-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.body-entry-methods button { min-height: 48px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-input); color: var(--text-secondary); font: inherit; font-size: .85rem; font-weight: 600; }
+.body-entry-methods button[aria-expanded="true"] { background: #253b2d; border-color: var(--accent-cyan); color: var(--accent-cyan); }
+.body-entry-panel { padding-top: 20px; margin-top: 16px; border-top: 1px solid var(--border); }
+.body-entry-panel > h2 { font-size: .9rem; }
+.body-measurement-notes { font-size: .75rem; color: var(--text-secondary); line-height: 1.65; margin: 14px 0; }
+.body-measurement-notes summary { min-height: 40px; cursor: pointer; padding-block: 10px; }
+.body-measurement-notes p { margin-top: 6px; }
+.dismissible-notice { position: relative; padding-right: 44px; }
+.dismissible-notice p { margin: 0; }
+.notice-close { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 40px; height: 40px; color: inherit; border-radius: 10px; font-size: 1.5rem; }
+.notice-close:hover { background: rgba(233,185,91,.12); }
 .wellness-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
 .wellness-grid > div { min-width: 0; }
 .wellness-check { display: flex; align-items: flex-start; gap: 10px; font-size: .8rem; line-height: 1.65; margin: 20px 0; }
