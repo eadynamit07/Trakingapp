@@ -47,6 +47,8 @@ const App = {
     // Load settings into form
     this.loadSettings();
 
+    Wellness.init();
+
     // Register service worker
     this.registerSW();
   },
@@ -816,17 +818,18 @@ const App = {
       document.getElementById(id).addEventListener('click', () => Enhancements.run(() => Enhancements.saveSettingsForm()));
     }
     document.getElementById('btn-clear-entries').addEventListener('click', () => Enhancements.run(async () => {
-      if (!confirm('Alle Eintr?ge wirklich l?schen?')) return;
+      if (!confirm('Alle Einträge wirklich löschen?')) return;
       await Storage.clearAllEntries();
-      this.showToast('Alle Eintr?ge gel?scht.', 'info');
+      this.showToast('Alle Einträge gelöscht.', 'info');
     }));
     document.getElementById('btn-clear-all').addEventListener('click', () => Enhancements.run(async () => {
-      if (!confirm('Wirklich ALLES zur?cksetzen? Alle Eintr?ge, Favoriten, Entw?rfe und Einstellungen werden gel?scht.')) return;
+      if (!confirm('Wirklich ALLES zurücksetzen? Alle Einträge, Favoriten, Körperprofile, Messungen, Gespräche, Entwürfe und Einstellungen werden gelöscht.')) return;
       await Storage.clearAll();
       Enhancements.clearDraftForms();
+      Wellness.resetUI();
       this.loadSettings();
       this.renderDashboard();
-      this.showToast('Alles zur?ckgesetzt.', 'info');
+      this.showToast('Alles zurückgesetzt.', 'info');
     }));
   },
 

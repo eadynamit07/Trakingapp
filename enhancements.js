@@ -207,7 +207,7 @@ const Enhancements = {
       try { data = JSON.parse(await file.text()); } catch { throw new Error('Die Datei enthält kein gültiges JSON.'); }
       const valid = Storage.validateBackup(data);
       this.pendingImport = data;
-      document.getElementById('import-preview').textContent = `${valid.entries.length} Einträge und ${valid.favorites.length} Favoriten geprüft. Wähle, wie die Sicherung übernommen werden soll.`;
+      document.getElementById('import-preview').textContent = `${valid.entries.length} Einträge, ${valid.favorites.length} Favoriten und ${valid.wellness.measurements.length} Körpermessungen geprüft${valid.wellness.profile ? ' · Körperprofil enthalten' : ''}. Wähle, wie die Sicherung übernommen werden soll.`;
       document.getElementById('import-mode').value = 'merge';
       document.getElementById('import-dialog').showModal();
     }));
@@ -220,7 +220,7 @@ const Enhancements = {
         await Storage.importData(this.pendingImport, mode);
         this.pendingImport = null;
         document.getElementById('import-dialog').close();
-        if (mode === 'replace') { this.clearDraftForms(); this.restoreDrafts(); }
+        if (mode === 'replace') { this.clearDraftForms(); this.restoreDrafts(); Wellness.resetUI(); Wellness.restoreDrafts(); }
         App.loadSettings(); App.renderDashboard();
         if (App.currentScreen === 'calendar') App.renderCalendar();
         App.showToast('Sicherung erfolgreich importiert.', 'success');

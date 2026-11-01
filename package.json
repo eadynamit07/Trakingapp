@@ -1,9 +1,9 @@
 {
   "name": "kcal-tracker",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/check.cjs && node tests/storage.cjs",
+    "test": "node tests/check.cjs && node tests/storage.cjs && node tests/wellness.cjs",
     "test:browser": "node tests/browser.cjs"
   },
   "devDependencies": {

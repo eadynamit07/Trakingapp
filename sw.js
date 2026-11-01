@@ -1,9 +1,10 @@
 // All shell URLs are relative to the registration scope (including GitHub Pages).
-const CACHE_NAME = 'kcal-tracker-v7';
+const CACHE_NAME = 'kcal-tracker-v8';
 const SCOPE = self.registration.scope;
 const ASSETS = ['./', 'index.html', 'style.css', 'android.css', 'storage.js',
   'text-parser.js', 'ai-photo.js', 'scanner.js', 'app.js', 'enhancements.js', 'android.js',
   'manifest.json', 'icon-192.png', 'icon-512.png'];
+ASSETS.push('wellness-model.js', 'wellness-ai.js', 'wellness.js', 'wellness.css');
 const SHELL = new Set(ASSETS.map(path => new URL(path, SCOPE).href));
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([...SHELL])));

@@ -8,7 +8,7 @@ const Storage = {
   backupStatus: 'Kein Dateibackup eingerichtet.',
   persistenceStatus: 'Dauerhafter Speicher wird angefragt …',
   defaults() {
-    return { entries: [], favorites: [], drafts: {}, settings: {
+    return { entries: [], favorites: [], drafts: {}, wellness: WellnessModel.defaults(), settings: {
       apiKey: '', goals: { calories: null, protein: null, carbs: null, fat: null }
     }};
   },
@@ -25,7 +25,7 @@ const Storage = {
     this.db.onversionchange = () => { this.db.close(); this.report('App bitte neu laden: Der Datenspeicher wurde aktualisiert.'); };
     let migrated = false;
     await this.commit(state => {
-      if (state) return state;
+      if (state) return { ...state, wellness: state.wellness || WellnessModel.defaults() };
       const next = this.defaults();
       // Preserve legacy data until the IndexedDB transaction has completed.
       const entries = localStorage.getItem('kcaltracker_entries');
@@ -120,6 +120,68 @@ const Storage = {
   deleteEntry(id) { return this.commit(state => ({ ...state, entries: state.entries.filter(entry => entry.id !== id) })); },
   clearAllEntries() { return this.commit(state => ({ ...state, entries: [] })); },
   clearAll() { return this.commit(() => this.defaults()); },
+  getWellness() { return structuredClone(this.state.wellness); },
+  saveWellnessDraft(key, value) {
+    if (!/^(profile|measure)-[a-zA-Z]+$|^coach-input$/.test(key)) return Promise.reject(new Error('Ungültiges Entwurfsfeld.'));
+    const text = WellnessModel.text(String(value), 4000, 'Entwurf');
+    return this.commit(state => { state.wellness.draft[key] = text; return state; }, 'draft');
+  },
+  saveProfile(raw) {
+    const profile = WellnessModel.profile(raw);
+    return this.commit(state => {
+      state.wellness.profile = profile;
+      for (const key of Object.keys(state.wellness.draft)) if (key.startsWith('profile-')) delete state.wellness.draft[key];
+      return state;
+    });
+  },
+  finishOnboarding(status = 'done') {
+    if (!['done', 'skipped'].includes(status)) return Promise.reject(new Error('Ungültiger Einrichtungsstatus.'));
+    return this.commit(state => { state.wellness.onboarding = status; return state; });
+  },
+  applyWellnessPlan() {
+    return this.commit(state => {
+      const plan = WellnessModel.plan(state.wellness.profile, state.wellness.measurements);
+      if (!plan.eligible) throw new Error(plan.reason);
+      state.settings.goals = plan.goals;
+      state.wellness.appliedPlan = { goals: plan.goals, createdAt: new Date().toISOString() };
+      state.wellness.onboarding = 'done';
+      return state;
+    });
+  },
+  async saveMeasurements(rows, editId = null) {
+    if (!Array.isArray(rows) || !rows.length || rows.length > 100) throw new Error('Bitte 1 bis 100 Messungen prüfen.');
+    const valid = rows.map(row => WellnessModel.measurement(row));
+    let stats;
+    await this.commit(state => {
+      if (editId) {
+        const index = state.wellness.measurements.findIndex(row => row.id === editId);
+        if (index < 0 || valid.length !== 1) throw new Error('Diese Messung wurde zwischenzeitlich entfernt.');
+        const others = state.wellness.measurements.filter(row => row.id !== editId);
+        if (others.some(row => row.date === valid[0].date && row.time === valid[0].time)) throw new Error('Zu diesem Zeitpunkt existiert bereits eine andere Messung.');
+        state.wellness.measurements[index] = { ...valid[0], id: editId };
+        stats = { added: 0, merged: 1, skipped: 0 };
+      } else {
+        stats = WellnessModel.mergeMeasurements(state.wellness.measurements, valid, () => this.id());
+        state.wellness.measurements = stats.measurements;
+      }
+      if (state.wellness.measurements.length > 10000) throw new Error('Maximal 10.000 Messungen werden unterstützt.');
+      for (const key of Object.keys(state.wellness.draft)) if (key.startsWith('measure-')) delete state.wellness.draft[key];
+      return state;
+    });
+    return stats;
+  },
+  deleteMeasurement(id) {
+    return this.commit(state => { state.wellness.measurements = state.wellness.measurements.filter(row => row.id !== id); return state; });
+  },
+  addWellnessMessage(role, text) {
+    if (!['user', 'assistant'].includes(role)) return Promise.reject(new Error('Ungültige Nachricht.'));
+    const message = { role, text: WellnessModel.text(text, 4000, 'Nachricht'), createdAt: new Date().toISOString() };
+    return this.commit(state => {
+      state.wellness.messages = [...state.wellness.messages, message].slice(-30);
+      state.wellness.draft['coach-input'] = '';
+      return state;
+    });
+  },
   saveDraft(id, value) {
     return this.commit(state => { state.drafts[id] = String(value); return state; }, 'draft');
   },
@@ -185,12 +247,13 @@ const Storage = {
   },
   exportData() {
     // API keys are deliberately not written to portable JSON files.
-    return { app: 'kcal-tracker', schemaVersion: 1, exportedAt: new Date().toISOString(),
+    return { app: 'kcal-tracker', schemaVersion: 2, exportedAt: new Date().toISOString(),
+      wellness: this.getWellness(),
       entries: this.getAllEntries(), favorites: this.getFavorites(), drafts: structuredClone(this.state.drafts),
       settings: { goals: this.getGoals() } };
   },
   validateBackup(data) {
-    if (!data || data.app !== 'kcal-tracker' || data.schemaVersion !== 1) throw new Error('Keine unterstützte KCal-Sicherungsdatei (Schema 1).');
+    if (!data || data.app !== 'kcal-tracker' || ![1, 2].includes(data.schemaVersion)) throw new Error('Keine unterstützte KCal-Sicherungsdatei (Schema 1 oder 2).');
     const drafts = {};
     if (!data.drafts || typeof data.drafts !== 'object' || Array.isArray(data.drafts)) throw new Error('Ungültige Entwürfe.');
     for (const [key, value] of Object.entries(data.drafts)) {
@@ -198,7 +261,8 @@ const Storage = {
       drafts[key] = value;
     }
     return { entries: this.validateEntries(data.entries), favorites: this.validateEntries(data.favorites),
-      settings: this.validateSettings(data.settings), drafts };
+      settings: this.validateSettings(data.settings), drafts,
+      wellness: data.schemaVersion === 1 ? WellnessModel.defaults() : WellnessModel.validateState(data.wellness) };
   },
   async importData(data, mode) {
     const valid = this.validateBackup(data);
@@ -211,6 +275,12 @@ const Storage = {
       const favorites = new Set(state.favorites.map(entry => this.favoriteKey(entry)));
       for (const entry of valid.favorites) if (!favorites.has(this.favoriteKey(entry))) {
         state.favorites.push({ ...entry, id: this.id() }); favorites.add(this.favoriteKey(entry));
+      }
+      state.wellness.measurements = WellnessModel.mergeMeasurements(state.wellness.measurements, valid.wellness.measurements, () => this.id()).measurements;
+      if (state.wellness.measurements.length > 10000) throw new Error('Zusammen maximal 10.000 Körpermessungen möglich.');
+      if (!state.wellness.profile && valid.wellness.profile) {
+        state.wellness.profile = valid.wellness.profile;
+        state.wellness.onboarding = valid.wellness.onboarding;
       }
       return state;
     });
@@ -242,7 +312,7 @@ const Storage = {
         const write = async () => {
           const state = await this.read('state');
           const payload = { ...this.exportData(), entries: state.entries, favorites: state.favorites,
-            drafts: state.drafts, settings: { goals: state.settings.goals } };
+            drafts: state.drafts, wellness: state.wellness, settings: { goals: state.settings.goals } };
           const writable = await handle.createWritable();
           try { await writable.write(JSON.stringify(payload, null, 2)); await writable.close(); }
           catch (error) { await writable.abort().catch(() => {}); throw error; }

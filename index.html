@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="android.css">
+  <link rel="stylesheet" href="wellness.css">
   <link rel="icon" type="image/png" href="icon-192.png">
 </head>
 <body>
@@ -23,9 +24,9 @@
     <label class="form-label" for="import-mode">Importmodus</label>
     <select id="import-mode" class="form-input">
       <option value="merge">Zusammenführen – vorhandene Einträge behalten</option>
-      <option value="replace">Ersetzen – Einträge, Favoriten, Ziele und Entwürfe überschreiben</option>
+      <option value="replace">Ersetzen – alle Daten einschließlich Körperprofil und Messhistorie</option>
     </select>
-    <p class="settings-note">Beim Zusammenführen bleiben vorhandene IDs, Ziele und Entwürfe unverändert. Dein API Key bleibt in beiden Modi erhalten.</p>
+    <p class="settings-note">Beim Zusammenführen bleiben vorhandene Einträge, Ziele, Körperprofile und Gespräche erhalten; Körpermessungen werden ergänzt. Widersprüchliche Messungen zum selben Zeitpunkt werden abgelehnt. Ersetzen übernimmt alle Daten aus der Datei. Dein API Key bleibt in beiden Modi erhalten.</p>
     <div class="backup-actions"><button type="button" class="btn btn-primary" id="btn-import-apply">Import anwenden</button><button type="button" class="btn btn-secondary" id="btn-import-cancel">Abbrechen</button></div>
   </dialog>
 
@@ -600,6 +601,11 @@
       </div>
     </section>
 
+    <section id="screen-body" class="screen">
+      <div class="screen-header"><div class="header-eyebrow">KÖRPER · ZIELE · ENTWICKLUNG</div><h1>Dein Fortschritt</h1></div>
+      <div id="wellness-root" class="wellness-content"></div>
+    </section>
+
     <!-- ========== SETTINGS SCREEN ========== -->
     <section id="screen-settings" class="screen">
       <div class="screen-header">
@@ -607,6 +613,7 @@
       </div>
 
       <div class="settings-content">
+        <div class="settings-section"><div class="settings-section-title">Körperprofil & Ernährungsplan</div><div class="settings-card"><p class="settings-note">Persönliche Kalorien- und Makroziele berechnen, Ziele mit KI besprechen und Körpermessungen manuell oder aus Screenshots übernehmen.</p><button type="button" id="btn-settings-body" class="btn btn-secondary">Plan & Körperfortschritt öffnen</button></div></div>
         <div class="settings-section">
           <div class="settings-section-title">Auf deinem Smartphone</div>
           <div class="settings-card install-card">
@@ -674,7 +681,7 @@
             <div class="divider"></div>
             <div class="backup-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-export-json">Daten exportieren (JSON)</button><button type="button" class="btn btn-secondary btn-sm" id="btn-import-json">Daten importieren (JSON)</button></div>
             <input type="file" id="import-file" accept=".json,application/json" hidden>
-            <p class="settings-note">JSON-Dateien enthalten Einträge, Favoriten, Ziele und Entwürfe. Dein API Key bleibt ausschließlich im Browserspeicher und wird nicht exportiert. Alle Sicherungsfunktionen sind kostenlos.</p>
+            <p class="settings-note">JSON-Dateien enthalten auch dein Körperprofil, Messhistorie und Ziel-Gespräch. Bewahre sie privat auf. Dein API Key bleibt ausschließlich im Browserspeicher und wird nicht exportiert. Alle Sicherungsfunktionen sind kostenlos.</p>
             <p class="settings-note" id="autosave-status" role="status">Änderungen werden automatisch gespeichert.</p>
           </div>
         </div>
@@ -687,7 +694,7 @@
         </div>
 
         <div class="version-info">
-          KCal Tracker · Version 3.0
+          KCal Tracker · Version 4.0
         </div>
       </div>
     </section>
@@ -707,6 +714,9 @@
     <button class="nav-btn nav-btn-add" data-screen="add" id="nav-add" aria-label="Mahlzeit hinzufügen" title="Mahlzeit eintragen">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
     </button>
+    <button class="nav-btn" data-screen="body" id="nav-body">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5m0 14h16M8 15l4-5 4 2 4-7"/></svg><span>Fortschritt</span>
+    </button>
     <button class="nav-btn" data-screen="settings" id="nav-settings">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
       <span>Profil</span>
@@ -717,12 +727,15 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <!-- App Modules -->
+  <script src="wellness-model.js"></script>
   <script src="storage.js"></script>
   <script src="text-parser.js"></script>
   <script src="ai-photo.js"></script>
   <script src="scanner.js"></script>
   <script src="app.js"></script>
   <script src="enhancements.js"></script>
+  <script src="wellness-ai.js"></script>
+  <script src="wellness.js"></script>
   <script src="android.js"></script>
 </body>
 </html>
