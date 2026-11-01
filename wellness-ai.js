@@ -1,42 +1,100 @@
 // Uses the existing user-supplied Gemini key. No screenshots leave the device before an explicit request.
 const WellnessAI = {
+  retryBaseMs: 800,
+  discoveryTimeoutMs: 10000,
+  imageTimeoutMs: 35000,
+  textTimeoutMs: 15000,
+  imageTotalTimeoutMs: 150000,
+  textTotalTimeoutMs: 70000,
+  waitRetry(ms, signal) {
+    signal.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const cleanup = () => signal.removeEventListener('abort', abort);
+      const timer = setTimeout(() => { cleanup(); resolve(); }, ms);
+      const abort = () => { clearTimeout(timer); cleanup(); reject(signal.reason); };
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  },
+  retryAfter(response) {
+    const value = response.headers?.get('Retry-After');
+    if (!value) return 0;
+    const seconds = Number(value);
+    return Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Math.max(0, Date.parse(value) - Date.now()) || 0;
+  },
+  httpError(status, phase, model) {
+    const error = new Error(`${AIPhoto.apiError(status)}${phase === 'discovery' ? ' Die Liste der verfügbaren Modelle konnte nicht geladen werden.' : ` Betroffenes Modell: ${model.replace(/^models\//, '')}.`}`);
+    error.status = status;
+    return error;
+  },
+  async discover(key, signal, onProgress) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await AIPhoto.getModels(key, signal, this.discoveryTimeoutMs); }
+      catch (error) {
+        signal.throwIfAborted();
+        const retryable = error.status >= 500 || error.status === 429 || ['TimeoutError', 'TypeError'].includes(error.name);
+        if (!retryable || attempt === 2 || error.retryAfterMs > 15000) {
+          if (error.status) throw this.httpError(error.status, 'discovery');
+          throw error;
+        }
+        onProgress?.('Die Modellsuche ist gerade nicht erreichbar. Ein neuer Versuch startet gleich …');
+        await this.waitRetry(Math.max(error.retryAfterMs || 0, this.retryBaseMs * 2 ** attempt), signal);
+      }
+    }
+  },
   async request(prompt, schema, images = [], { signal, onProgress } = {}) {
     const key = Storage.getApiKey();
     if (!key) throw new Error('Bitte zuerst im Profil deinen Gemini API Key hinterlegen. Der Zielrechner und manuelle Messungen funktionieren auch ohne KI.');
-    const totalSignal = AbortSignal.any([AbortSignal.timeout(images.length ? 100000 : 45000), ...(signal ? [signal] : [])]);
+    const totalSignal = AbortSignal.any([AbortSignal.timeout(images.length ? this.imageTotalTimeoutMs : this.textTotalTimeoutMs), ...(signal ? [signal] : [])]);
     let lastError;
     try {
       onProgress?.('Verbindung zur KI wird hergestellt …');
-      const available = await AIPhoto.getModels(key, totalSignal, 10000);
-      const models = (images.length ? available : AIPhoto.textModels(available)).slice(0, 2);
-      if (models.length === 1) models.push(models[0]);
-      for (const [index, model] of models.entries()) {
+      const available = await this.discover(key, totalSignal, onProgress);
+      const models = [...new Set(images.length ? available : AIPhoto.textModels(available))].slice(0, 3);
+      if (!models.length) throw new Error('Kein passendes KI-Modell verfügbar. Bitte später erneut versuchen.');
+      let modelIndex = 0, simplified = false, delay = 0;
+      const maxAttempts = images.length ? 4 : 3;
+      for (let index = 0; index < maxAttempts; index++) {
         totalSignal.throwIfAborted();
-        onProgress?.(index ? 'Ein weiterer KI-Versuch läuft …' : images.length ? 'Messwerte und Datumsangaben werden gelesen …' : 'Dein Ziel wird eingeordnet …');
+        if (index) await this.waitRetry(Math.max(delay, this.retryBaseMs * 2 ** (index - 1)), totalSignal);
+        const model = models[Math.min(modelIndex, models.length - 1)];
+        onProgress?.(index ? `Die KI-Anfrage wird wiederholt (Versuch ${index + 1} von ${maxAttempts}) …` : images.length ? 'Messwerte und Datumsangaben werden gelesen …' : 'Dein Ziel wird eingeordnet …');
         try {
           const config = AIPhoto.generationConfig(model, false);
-          config.responseSchema = schema;
+          if (!simplified) config.responseSchema = schema;
+          else delete config.thinkingConfig;
           config.maxOutputTokens = images.length ? 12000 : 1500;
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-            signal: AbortSignal.any([totalSignal, AbortSignal.timeout(images.length ? 45000 : 15000)]),
-            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }, ...images.map(image => ({ inline_data: { mime_type: image.mimeType, data: image.base64 } }))] }], generationConfig: config })
+            signal: AbortSignal.any([totalSignal, AbortSignal.timeout(images.length ? this.imageTimeoutMs : this.textTimeoutMs)]),
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: simplified ? `${prompt}\nErwartetes JSON-Schema (fehlende Werte als null, keine zusätzlichen Felder):\n${JSON.stringify(schema)}` : prompt }, ...images.map(image => ({ inline_data: { mime_type: image.mimeType, data: image.base64 } }))] }], generationConfig: config })
           });
           if (!response.ok) {
             if (response.status === 404) AIPhoto.modelCache = null;
-            lastError = new Error(AIPhoto.apiError(response.status));
+            lastError = this.httpError(response.status, 'analysis', model);
+            delay = this.retryAfter(response);
+            // Long quota waits require a later user retry; never retry earlier than requested.
+            if (delay > 15000) throw lastError;
+            if (response.status === 400 || response.status === 500) simplified = true;
+            if ([400, 404].includes(response.status) || index > 0) modelIndex++;
             if ([400, 404, 429].includes(response.status) || response.status >= 500) continue;
             throw lastError;
           }
           const data = await response.json();
           if (data.promptFeedback?.blockReason || ['SAFETY', 'RECITATION'].includes(data.candidates?.[0]?.finishReason)) throw new Error('Die KI konnte diese Anfrage nicht auswerten. Bitte manuell fortfahren.');
-          if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') { lastError = new Error('Die KI-Antwort wurde abgeschnitten. Bitte weniger Screenshots auf einmal auswählen.'); continue; }
+          if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') { lastError = new Error('Die KI-Antwort wurde abgeschnitten. Bitte weniger Screenshots auf einmal auswählen.'); modelIndex++; continue; }
           const text = (data.candidates?.[0]?.content?.parts || []).filter(part => !part.thought && typeof part.text === 'string').map(part => part.text).join('').trim();
-          try { return JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
-          catch { lastError = new Error('Die KI-Antwort konnte nicht gelesen werden. Bitte erneut versuchen.'); }
+          try {
+            const result = JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
+            if (AIPhoto.modelCache?.key === key) {
+              if (images.length) AIPhoto.modelCache.models = [model, ...available.filter(name => name !== model)];
+              else AIPhoto.modelCache.textModel = model;
+            }
+            return result;
+          }
+          catch { lastError = new Error('Die KI-Antwort konnte nicht gelesen werden. Bitte erneut versuchen.'); modelIndex++; }
         } catch (error) {
           if (totalSignal.aborted) throw totalSignal.reason;
-          if (['TypeError', 'TimeoutError'].includes(error.name)) { lastError = error; continue; }
+          if (['TypeError', 'TimeoutError'].includes(error.name)) { lastError = error; if (index > 0) modelIndex++; continue; }
           throw error;
         }
       }

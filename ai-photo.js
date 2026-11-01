@@ -254,7 +254,11 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
     if (status === 400) return 'Google hat die KI-Anfrage abgelehnt (HTTP 400). Mögliche Ursachen sind der API Key oder nicht unterstützte Modelleinstellungen.';
     if (status === 401 || status === 403) return `KI-Zugriff verweigert (HTTP ${status}). Prüfe deinen Gemini API Key und seine Berechtigungen im Profil.`;
     if (status === 429) return 'Dein KI-Limit ist erreicht (HTTP 429). Bitte später erneut versuchen oder dein Kontingent in Google AI Studio prüfen.';
-    if (status >= 500) return 'Der KI-Dienst ist gerade nicht erreichbar. Bitte später erneut versuchen.';
+    if (status === 404) return 'Das ausgewählte KI-Modell ist nicht mehr verfügbar (HTTP 404). Bitte erneut versuchen.';
+    if (status === 413) return 'Die KI-Anfrage ist zu groß (HTTP 413). Bitte weniger Screenshots auswählen.';
+    if (status === 500) return 'Google meldet einen internen KI-Fehler (HTTP 500). Bitte erneut versuchen.';
+    if (status === 503) return 'Das Google-KI-Modell ist vorübergehend überlastet oder nicht verfügbar (HTTP 503). Bitte später erneut versuchen.';
+    if (status >= 500) return `Der Google-KI-Dienst meldet einen Serverfehler (HTTP ${status}). Bitte später erneut versuchen.`;
     return 'Die KI-Analyse ist fehlgeschlagen. Bitte erneut versuchen.';
   },
 
@@ -267,7 +271,11 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
       url.searchParams.set('pageSize', '1000');
       if (pageToken) url.searchParams.set('pageToken', pageToken);
       const response = await fetch(url, { headers: { 'x-goog-api-key': apiKey }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
-      if (!response.ok) throw { userMessage: this.apiError(response.status) };
+      if (!response.ok) {
+        const retryHeader = response.headers?.get('Retry-After');
+        const retryAfterMs = retryHeader ? (Number.isFinite(Number(retryHeader)) ? Math.max(0, Number(retryHeader) * 1000) : Math.max(0, Date.parse(retryHeader) - Date.now()) || 0) : 0;
+        throw { userMessage: this.apiError(response.status), status: response.status, retryAfterMs };
+      }
       const data = await response.json();
       models.push(...(data.models || []).filter(model =>
         /^models\/gemini-[a-z0-9.-]+$/i.test(model.name) && /flash/.test(model.name) &&

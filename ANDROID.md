@@ -57,7 +57,13 @@ Oben öffnet **⚙ Werte bearbeiten** das Körperprofil. **Schreibe deine Ziele*
 
 Der Hinweis für unter 18-Jährige erscheint ausschließlich bei einem gespeicherten Alter unter 18. Er lässt sich mit **×** schließen; die Auswahl wird lokal und in JSON-Backups gespeichert. Bei einer Änderung des Alters wird sie zurückgesetzt. Das Ausblenden verändert die fachlichen Grenzen des Zielrechners nicht.
 
-Für das Update alle Laufzeitdateien gemeinsam veröffentlichen, einschließlich `wellness-model.js`, `wellness-ai.js`, `wellness.js` und `wellness.css`. `node_modules` und Tests werden nicht benötigt. Im Profil steht anschließend **KCal Tracker · Version 4.1**. Vorhandene App-Fenster nach Abschluss der Veröffentlichung schließen und die App neu öffnen; Browserdaten nicht löschen.
+## Version 4.2: robustere Screenshot-Anfragen
+
+Die Modellsuche wird bei vorübergehenden Server-, Netzwerk- und Kontingentfehlern bis zu dreimal versucht. Screenshot-Analysen haben höchstens vier Versuche mit wachsenden Wartezeiten, einer Wiederholung beim zunächst gewählten Modell und anschließendem Wechsel auf weitere verfügbare Modelle. HTTP 400 oder 500 können eine vereinfachte JSON-Anfrage ohne erzwungenes Antwortschema auslösen; die vollständige lokale Messwertvalidierung bleibt aktiv. Lange vom Dienst vorgegebene Wartezeiten werden nicht durch vorzeitiges erneutes Senden umgangen. Eine Screenshot-Analyse endet spätestens nach 150 Sekunden; Ziel-Anfragen nach 70 Sekunden. Abbrechen beendet auch eine laufende Wartezeit.
+
+Die Fehleranzeige unterscheidet HTTP-Statuscodes und zeigt, ob die Modellsuche oder die Analyse betroffen war; bei einer Analyse wird das Modell genannt. API-Schlüssel, Bilder und unverarbeitete Serverantworten werden dabei nicht protokolliert oder angezeigt. Bereits ausgewählte Screenshots bleiben für einen erneuten Versuch erhalten. Ein anhaltender Fehler des externen Google-Dienstes kann durch die App nicht behoben werden. Referenz: [Gemini-Fehlerbehandlung](https://ai.google.dev/gemini-api/docs/troubleshooting).
+
+Für das Update alle Laufzeitdateien gemeinsam veröffentlichen, einschließlich `wellness-model.js`, `wellness-ai.js`, `wellness.js` und `wellness.css`. `node_modules` und Tests werden nicht benötigt. Im Profil steht anschließend **KCal Tracker · Version 4.2**. Vorhandene App-Fenster nach Abschluss der Veröffentlichung schließen und die App neu öffnen; Browserdaten nicht löschen.
 
 Für die Fotoanalyse im Profil einen eigenen Gemini API Key eintragen. Foto und optionale Beschreibung werden erst beim Tippen auf **Foto analysieren** an Google gesendet. Der bisher im Quelltext enthaltene gemeinsame Schlüssel wurde entfernt; falls er öffentlich veröffentlicht war, sollte er in Google AI Studio widerrufen werden. Bereits gespeicherte Schlüssel werden nicht automatisch gelöscht.
 
