@@ -9,7 +9,25 @@ Dies ist eine installierbare Web-App (PWA), keine APK. Für eine Veröffentlichu
 
 Nach dem ersten erfolgreichen Laden sind die Oberfläche und manuelle Einträge offline verfügbar. Die Fotoanalyse, Barcode-Produktsuche und das erstmalige Laden der externen Scanner-Bibliothek benötigen Internet. Updates werden nach dem Schließen aller offenen App-Fenster und erneutem Öffnen aktiv.
 
-Einträge und Einstellungen liegen im lokalen Browser-Speicher. Durch das Löschen der Website-Daten gehen sie verloren. Vorhandene Einträge werden bei diesem Update beibehalten.
+Einträge, Favoriten, Ziele, Einstellungen und Eingabeentwürfe liegen in IndexedDB. Vorhandene localStorage-Daten werden beim ersten Start automatisch übernommen; erst nach erfolgreicher Speicherung wird die alte Kopie entfernt. Jede Änderung wird unmittelbar gespeichert. Ein Mahlzeiteintrag wird erst nach erfolgreichem Abschluss der Datenbanktransaktion bestätigt. Unfertige Eingaben werden als Entwurf gesichert, ohne bereits zur Tagesbilanz zu zählen.
+
+Beim Start fragt die App über `navigator.storage.persist()` dauerhaften Browserspeicher an. Die Gewährung hängt vom Browser ab; der Status steht im Profil. Das Löschen der Website-Daten, ein privates Browserfenster oder Geräteverlust können Daten trotzdem entfernen.
+
+## Kostenlose Sicherungen und Wiederherstellung
+
+Unter **Profil → Datensicherung auf deinem Gerät** stehen JSON-Export und JSON-Import bereit. Importe werden vor jeder Änderung vollständig geprüft (Schema-Version, IDs, echte Kalenderdaten, Kategorien, endliche nicht negative Nährwerte, Ziele und Entwürfe). Anschließend kann der Nutzer zusammenführen oder ersetzen. Beim Zusammenführen gewinnen bestehende Eintrags-IDs; Ziele und Entwürfe bleiben erhalten. Favoriten werden anhand von Name, Kategorie und Nährwerten dedupliziert. Ersetzen übernimmt Einträge, Favoriten, Ziele und Entwürfe atomar. Der lokale API Key bleibt erhalten und wird nicht in JSON-Dateien exportiert.
+
+**Automatisches Dateisystem-Backup** verwendet eine einmalig ausgewählte lokale JSON-Datei. Der Datei-Handle bleibt in IndexedDB und die App aktualisiert die Datei nach Änderungen. Die Datei enthält den aktuellen Bestand, keine Versionshistorie; auch Löschungen werden übernommen. Es gibt keine laufenden Kosten und keinen Cloud-Dienst. Die App kann nur schreiben, während sie geöffnet ist und Schreibrechte besitzt. Nach Browserneustarts kann eine erneute Freigabe erforderlich sein. Ein fehlgeschlagenes oder pausiertes Dateibackup wird sichtbar angezeigt; die Speicherung in IndexedDB funktioniert unabhängig davon. Unterstützt der Browser `showSaveFilePicker` nicht, bleiben IndexedDB und manueller JSON-Export verfügbar.
+
+## Favoriten und Auswertungen
+
+Ein Stern neben einer Mahlzeit speichert die Portion als eigenständigen Favoriten. Die Schnellauswahl trägt sie mit einem Klick am ausgewählten Tag ein; sie bleibt auch nach dem Löschen des ursprünglichen Tagebucheintrags erhalten. Die Tagesübersicht gruppiert Frühstück, Mittagessen, Abendessen und Snacks. Die Makro-Prozente beziehen sich auf die Makro-Energie (Protein und Kohlenhydrate 4 kcal/g, Fett 9 kcal/g). Im Kalender zeigt die Wochenanalyse Montag bis Sonntag, die Kaloriensumme und den Durchschnitt ausschließlich erfasster Tage.
+
+Kameraaufnahmen und hochgeladene Bilder werden vor der Analyse auf höchstens 1024 Pixel pro Seite und JPEG-Qualität 0,8 komprimiert. Aufnehmen, Tabwechsel, Verlassen der Seite und Ausblenden der App beenden aktive Kamerastreams. Während der KI-Analyse erscheinen Nährwert-Skeletons. Unplausible Werte erhalten einen Prüfhinweis.
+
+## Lokale Prüfung
+
+`npm ci` installiert ausschließlich Entwicklungsabhängigkeiten. `npm test` prüft KI-Abläufe, Migration, IndexedDB-Transaktionen einschließlich paralleler Sitzungen, Schema-Validierung und Dateibackup-Fehler. `npm run test:browser` prüft die Oberfläche in lokal installiertem Chrome inklusive Wiederherstellung, Import/Export, serialisierbarer Datei-Handles, Bildkomprimierung und Offline-Start. Mit `KCAL_BROWSER=msedge` kann alternativ Edge verwendet werden. Externe KI-Anfragen werden im Browsertest simuliert. Für Kamera und Dateiauswahl sind HTTPS oder localhost erforderlich. Es wird kein Backend benötigt.
 
 Für die Fotoanalyse im Profil einen eigenen Gemini API Key eintragen. Foto und optionale Beschreibung werden erst beim Tippen auf **Foto analysieren** an Google gesendet. Der bisher im Quelltext enthaltene gemeinsame Schlüssel wurde entfernt; falls er öffentlich veröffentlicht war, sollte er in Google AI Studio widerrufen werden. Bereits gespeicherte Schlüssel werden nicht automatisch gelöscht.
 

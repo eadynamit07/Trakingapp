@@ -7,6 +7,7 @@ const AIPhoto = {
   stream: null,
   videoElement: null,
   canvasElement: null,
+  cameraGeneration: 0,
 
   modelCache: null,
   requestTimeoutMs: 45000,
@@ -20,20 +21,27 @@ const AIPhoto = {
     this.canvasElement = canvasEl;
 
     this.stopCamera();
+    const generation = this.cameraGeneration;
     try {
       // Prefer back camera for food photos
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
           width: { ideal: 1280 },
           height: { ideal: 960 }
         }
       });
+      if (generation !== this.cameraGeneration) {
+        stream.getTracks().forEach(track => track.stop());
+        return { success: false, error: 'Kamera wurde geschlossen.' };
+      }
+      this.stream = stream;
       this.videoElement.srcObject = this.stream;
       await this.videoElement.play();
+      if (generation !== this.cameraGeneration) return { success: false, error: 'Kamera wurde geschlossen.' };
       return { success: true };
     } catch (err) {
-      this.stopCamera();
+      if (generation === this.cameraGeneration) this.stopCamera();
       return {
         success: false,
         error: 'Kamera-Zugriff fehlgeschlagen. Bitte erlaube den Kamera-Zugriff in den Browser-Einstellungen.'
@@ -43,6 +51,7 @@ const AIPhoto = {
 
   // Stop camera stream
   stopCamera() {
+    this.cameraGeneration++;
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
       this.stream = null;
@@ -61,21 +70,16 @@ const AIPhoto = {
     const video = this.videoElement;
     const canvas = this.canvasElement;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
 
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-
-    // Get base64 image data (JPEG for smaller size)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    const base64Data = dataUrl.split(',')[1];
-
-    return {
-      dataUrl,
-      base64: base64Data,
-      mimeType: 'image/jpeg'
-    };
+    try {
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      return { dataUrl, base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' };
+    } finally { this.stopCamera(); }
   },
 
   // Analyze photo with Gemini Vision API
@@ -290,7 +294,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in exakt diesem Format (ohne Mark
     if (file.size > 25 * 1024 * 1024) throw new Error('Das Bild ist zu groß. Bitte wähle ein Bild unter 25 MB.');
     const bitmap = await createImageBitmap(file).catch(() => { throw new Error('Dieses Bildformat konnte nicht geöffnet werden. Bitte JPG, PNG oder WebP verwenden.'); });
     try {
-      const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+      const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));

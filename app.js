@@ -15,9 +15,9 @@ const App = {
   // =====================
   // Initialization
   // =====================
-  init() {
+  async init() {
     // Initialize local settings
-    Storage.init();
+    await Storage.init();
 
     // Set current date to today
     this.currentDate = Storage.getToday();
@@ -39,6 +39,7 @@ const App = {
     this.setupBarcodeScanner();
     this.setupSettings();
     this.setupCategorySelectors();
+    Enhancements.init();
 
     // Render dashboard
     this.renderDashboard();
@@ -117,6 +118,7 @@ const App = {
     } else if (screenId === 'add') {
       this.syncAddDateInput();
     }
+    window.scrollTo({ top: 0, behavior: 'instant' });
   },
 
   // =====================
@@ -191,6 +193,7 @@ const App = {
 
     // Render meal list
     this.renderMealList(entries);
+    Enhancements.renderDashboard(totals);
   },
 
   updateMacroCard(type, value, goal) {
@@ -258,6 +261,7 @@ const App = {
               </div>
             </div>
             <div class="meal-card-cal">${Math.round(entry.calories || 0)} <small>kcal</small></div>
+            <button type="button" class="favorite-toggle ${Storage.isFavorite(entry) ? 'selected' : ''}" data-favorite-entry="${entry.id}" aria-label="Favorit umschalten" aria-pressed="${Storage.isFavorite(entry)}">${Storage.isFavorite(entry) ? '★' : '☆'}</button>
             <button type="button" class="meal-card-delete" onclick="App.requestDeleteEntry('${entry.id}')" title="Eintrag löschen">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
@@ -317,7 +321,7 @@ const App = {
     });
   },
 
-  saveManualEntry() {
+  async saveManualEntry() {
     const name = document.getElementById('manual-name').value.trim();
     const calories = parseFloat(document.getElementById('manual-calories').value) || 0;
     const protein = parseFloat(document.getElementById('manual-protein').value) || 0;
@@ -332,13 +336,13 @@ const App = {
 
     const targetDate = this.getTargetDate();
 
-    Storage.addEntry({
+    await Storage.addEntry({
       date: targetDate,
       name: name || 'Manueller Eintrag',
       category,
       calories, protein, carbs, fat,
       source: 'manual'
-    });
+    }, 'manual');
 
     this.currentDate = targetDate;
     this.calendarSelectedDate = targetDate;
@@ -392,10 +396,15 @@ const App = {
     });
     document.getElementById('btn-photo-capture').addEventListener('click', () => {
       if (this.photoBusy) return;
-      const photo = AIPhoto.capturePhoto();
-      if (!photo) return;
-      this.resetPhotoCamera();
-      this.selectPhoto(photo);
+      try {
+        const photo = AIPhoto.capturePhoto();
+        if (!photo) { this.showPhotoError('Die Kamera ist noch nicht bereit. Bitte kurz warten.'); return; }
+        this.resetPhotoCamera();
+        this.selectPhoto(photo);
+      } catch {
+        this.resetPhotoCamera();
+        this.showPhotoError('Das Foto konnte nicht aufgenommen werden. Bitte erneut versuchen oder ein Bild auswählen.');
+      }
     });
     fileInput.addEventListener('change', async event => {
       const file = event.target.files[0];
@@ -406,6 +415,7 @@ const App = {
     document.getElementById('btn-photo-analyze').addEventListener('click', () => this.analyzePhoto());
     document.getElementById('btn-photo-cancel').addEventListener('click', () => this.photoController?.abort());
     document.getElementById('photo-description').addEventListener('input', () => {
+      Enhancements.discardResults('photo');
       document.getElementById('photo-results').style.display = 'none';
       document.getElementById('photo-error').hidden = true;
       this.updatePhotoControls();
@@ -432,6 +442,7 @@ const App = {
   async selectPhoto(source) {
     if (this.photoBusy) return;
     this.photoBusy = true;
+    Enhancements.discardResults('photo');
     this.resetPhotoCamera();
     this.photoData = null;
     this.photoAttempted = false;
@@ -461,6 +472,7 @@ const App = {
     this.resetPhotoCamera();
     this.photoAttempted = true;
     this.photoController = new AbortController();
+    Enhancements.setAnalyzing('photo', true);
     this.updatePhotoControls();
     document.getElementById('photo-error').hidden = true;
     document.getElementById('photo-results').style.display = 'none';
@@ -481,20 +493,23 @@ const App = {
     } finally {
       this.photoBusy = false;
       this.photoController = null;
+      Enhancements.setAnalyzing('photo', false);
       loading.style.display = 'none';
       this.updatePhotoControls();
     }
   },
 
   showPhotoResults(data) {
+    Enhancements.checkPlausibility('photo', data);
     const results = document.getElementById('photo-results');
     results.style.display = 'block';
 
     document.getElementById('photo-result-name').value = data.name || '';
-    document.getElementById('photo-result-calories').value = data.calories || '';
-    document.getElementById('photo-result-protein').value = data.protein || '';
-    document.getElementById('photo-result-carbs').value = data.carbs || '';
-    document.getElementById('photo-result-fat').value = data.fat || '';
+    document.getElementById('photo-result-calories').value = data.calories ?? '';
+    document.getElementById('photo-result-protein').value = data.protein ?? '';
+    document.getElementById('photo-result-carbs').value = data.carbs ?? '';
+    document.getElementById('photo-result-fat').value = data.fat ?? '';
+    Enhancements.captureDraft('photo');
   },
 
   // =====================
@@ -504,6 +519,7 @@ const App = {
     document.getElementById('btn-text-ai').addEventListener('click', () => this.analyzeTextWithAI());
     document.getElementById('btn-text-cancel').addEventListener('click', () => this.textController?.abort());
     document.getElementById('text-input').addEventListener('input', () => {
+      Enhancements.discardResults('text');
       document.getElementById('text-results').style.display = 'none';
       document.getElementById('text-error').hidden = true;
     });
@@ -532,12 +548,14 @@ const App = {
   },
 
   showTextResults(data, estimated = false) {
+    Enhancements.checkPlausibility('text', data);
     for (const key of ['name', 'calories', 'protein', 'carbs', 'fat']) {
       document.getElementById(`text-result-${key}`).value = data[key] ?? '';
     }
     document.getElementById('text-results-badge').textContent = estimated ? 'KI-Schätzung' : 'Geparst';
     document.getElementById('text-estimate-note').hidden = !estimated;
     document.getElementById('text-results').style.display = 'block';
+    Enhancements.captureDraft('text');
   },
 
   async analyzeTextWithAI() {
@@ -558,6 +576,7 @@ const App = {
       return;
     }
     this.textBusy = true;
+    Enhancements.setAnalyzing('text', true);
     this.textController = new AbortController();
     input.disabled = button.disabled = document.getElementById('btn-text-analyze').disabled = true;
     cancel.hidden = false;
@@ -578,6 +597,7 @@ const App = {
       error.hidden = false;
     } finally {
       this.textBusy = false;
+      Enhancements.setAnalyzing('text', false);
       this.textController = null;
       input.disabled = button.disabled = document.getElementById('btn-text-analyze').disabled = false;
       button.textContent = 'Erneut analysieren';
@@ -589,7 +609,7 @@ const App = {
   // =====================
   // Save from Results (Photo / Text)
   // =====================
-  saveFromResults(source) {
+  async saveFromResults(source) {
     const prefix = source === 'photo' ? 'photo' : 'text';
     const name = document.getElementById(`${prefix}-result-name`).value.trim();
     const calories = parseFloat(document.getElementById(`${prefix}-result-calories`).value) || 0;
@@ -605,13 +625,13 @@ const App = {
 
     const targetDate = this.getTargetDate();
 
-    Storage.addEntry({
+    await Storage.addEntry({
       date: targetDate,
       name: name || `${source === 'photo' ? 'Foto' : 'Text'}-Eintrag`,
       category,
       calories, protein, carbs, fat,
       source
-    });
+    }, source);
 
     this.currentDate = targetDate;
     this.calendarSelectedDate = targetDate;
@@ -645,6 +665,9 @@ const App = {
     const amountInput = document.getElementById('barcode-amount');
 
     btnStart.addEventListener('click', async () => {
+      if (btnStart.disabled) return;
+      btnStart.disabled = true;
+      document.getElementById('barcode-error').hidden = true;
       const placeholder = document.getElementById('barcode-placeholder');
       placeholder.style.display = 'none';
 
@@ -655,6 +678,7 @@ const App = {
       const result = await BarcodeScanner.start('barcode-reader', (event) => {
         this.handleBarcodeResult(event);
       });
+      btnStart.disabled = false;
 
       if (result.success) {
         btnStart.classList.add('hidden');
@@ -662,6 +686,8 @@ const App = {
       } else {
         placeholder.style.display = 'flex';
         this.showToast(result.error, 'error');
+        document.getElementById('barcode-error').textContent = result.error;
+        document.getElementById('barcode-error').hidden = false;
       }
     });
 
@@ -684,6 +710,7 @@ const App = {
   },
 
   handleBarcodeResult(event) {
+    if (this.currentScreen !== 'add' || !document.getElementById('method-barcode').classList.contains('active')) return;
     if (event.type === 'scanning') {
       this.showToast(`Barcode erkannt: ${event.barcode}`, 'info');
       document.getElementById('btn-barcode-stop').classList.add('hidden');
@@ -697,11 +724,15 @@ const App = {
       this.showBarcodeProduct(event.data);
     } else {
       this.showToast(event.error, 'error');
+      document.getElementById('barcode-error').textContent = event.error;
+      document.getElementById('barcode-error').hidden = false;
       document.getElementById('barcode-placeholder').style.display = 'flex';
     }
   },
 
   showBarcodeProduct(data) {
+    document.getElementById('barcode-error').hidden = true;
+    Enhancements.checkPlausibility('barcode', data.per100g);
     const results = document.getElementById('barcode-results');
     results.style.display = 'block';
 
@@ -740,7 +771,7 @@ const App = {
     document.getElementById('barcode-fat-calc').textContent = calc.fat;
   },
 
-  saveBarcodeEntry() {
+  async saveBarcodeEntry() {
     if (!this.barcodeProductData) return;
 
     const amount = parseFloat(document.getElementById('barcode-amount').value) || 0;
@@ -753,7 +784,7 @@ const App = {
     const category = this.getSelectedCategory('barcode-category');
     const targetDate = this.getTargetDate();
 
-    Storage.addEntry({
+    await Storage.addEntry({
       date: targetDate,
       name: this.barcodeProductData.name,
       category,
@@ -763,7 +794,7 @@ const App = {
       fat: calc.fat,
       amount: `${amount}g`,
       source: 'barcode'
-    });
+    }, 'barcode');
 
     this.currentDate = targetDate;
     this.calendarSelectedDate = targetDate;
@@ -781,49 +812,22 @@ const App = {
   // Settings
   // =====================
   setupSettings() {
-    document.getElementById('btn-save-api-key').addEventListener('click', () => {
-      const key = document.getElementById('settings-api-key').value.trim();
-      const settings = Storage.getSettings();
-      settings.apiKey = key;
-      AIPhoto.modelCache = null;
-      Storage.saveSettings(settings);
-      this.showToast('✅ API Key gespeichert!', 'success');
-    });
-
-    document.getElementById('btn-save-goals').addEventListener('click', () => {
-      const settings = Storage.getSettings();
-      const calVal = document.getElementById('settings-goal-calories').value;
-      const proVal = document.getElementById('settings-goal-protein').value;
-      const carbVal = document.getElementById('settings-goal-carbs').value;
-      const fatVal = document.getElementById('settings-goal-fat').value;
-
-      settings.goals = {
-        calories: calVal ? parseFloat(calVal) : null,
-        protein: proVal ? parseFloat(proVal) : null,
-        carbs: carbVal ? parseFloat(carbVal) : null,
-        fat: fatVal ? parseFloat(fatVal) : null
-      };
-      Storage.saveSettings(settings);
-      this.showToast('✅ Tagesziele gespeichert!', 'success');
-    });
-
-    document.getElementById('btn-clear-entries').addEventListener('click', () => {
-      if (confirm('Alle Einträge wirklich löschen?')) {
-        Storage.clearAllEntries();
-        this.renderDashboard();
-        this.showToast('Alle Einträge gelöscht.', 'info');
-      }
-    });
-
-    document.getElementById('btn-clear-all').addEventListener('click', () => {
-      if (confirm('Wirklich ALLES zurücksetzen? Alle Einträge und Einstellungen werden gelöscht.')) {
-        Storage.clearAll();
-        Storage.init();
-        this.loadSettings();
-        this.renderDashboard();
-        this.showToast('Alles zurückgesetzt.', 'info');
-      }
-    });
+    for (const id of ['btn-save-api-key', 'btn-save-goals']) {
+      document.getElementById(id).addEventListener('click', () => Enhancements.run(() => Enhancements.saveSettingsForm()));
+    }
+    document.getElementById('btn-clear-entries').addEventListener('click', () => Enhancements.run(async () => {
+      if (!confirm('Alle Eintr?ge wirklich l?schen?')) return;
+      await Storage.clearAllEntries();
+      this.showToast('Alle Eintr?ge gel?scht.', 'info');
+    }));
+    document.getElementById('btn-clear-all').addEventListener('click', () => Enhancements.run(async () => {
+      if (!confirm('Wirklich ALLES zur?cksetzen? Alle Eintr?ge, Favoriten, Entw?rfe und Einstellungen werden gel?scht.')) return;
+      await Storage.clearAll();
+      Enhancements.clearDraftForms();
+      this.loadSettings();
+      this.renderDashboard();
+      this.showToast('Alles zur?ckgesetzt.', 'info');
+    }));
   },
 
   loadSettings() {
@@ -1086,6 +1090,7 @@ const App = {
         </button>
       </div>
     `;
+    Enhancements.renderWeekAnalysis(dateStr);
   },
 
   openDayInDashboard(dateStr) {
@@ -1187,14 +1192,14 @@ const App = {
     this.pendingDeleteId = null;
   },
 
-  confirmDeleteEntry() {
+  async confirmDeleteEntry() {
     if (!this.pendingDeleteId) return;
 
     const id = this.pendingDeleteId;
     const entry = Storage.getEntryById(id);
     const entryName = entry ? entry.name : 'Eintrag';
 
-    Storage.deleteEntry(id);
+    await Storage.deleteEntry(id);
     this.closeDeleteModal();
 
     this.renderDashboard();
@@ -1250,5 +1255,13 @@ const App = {
 
 // ---- Initialize on DOM ready ----
 document.addEventListener('DOMContentLoaded', () => {
-  App.init();
+  window.addEventListener('kcal-storage-error', event => {
+    document.getElementById('storage-error').textContent = event.detail;
+    document.getElementById('storage-error').hidden = false;
+  });
+  App.init().catch(() => {
+    document.getElementById('storage-error').textContent = 'Der lokale Datenspeicher konnte nicht geöffnet werden. Bitte Browser-Speicher freigeben und die App neu laden. Bestehende Daten wurden nicht gelöscht.';
+    document.getElementById('storage-error').hidden = false;
+    document.querySelectorAll('.add-content button, .settings-content button').forEach(button => { button.disabled = true; });
+  });
 });

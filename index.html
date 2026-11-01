@@ -16,6 +16,18 @@
 <body>
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+  <div class="error-message storage-error" id="storage-error" role="alert" hidden></div>
+  <dialog id="import-dialog" class="download-dialog" aria-labelledby="import-title">
+    <h2 id="import-title">Sicherung importieren</h2>
+    <p id="import-preview"></p>
+    <label class="form-label" for="import-mode">Importmodus</label>
+    <select id="import-mode" class="form-input">
+      <option value="merge">Zusammenführen – vorhandene Einträge behalten</option>
+      <option value="replace">Ersetzen – Einträge, Favoriten, Ziele und Entwürfe überschreiben</option>
+    </select>
+    <p class="settings-note">Beim Zusammenführen bleiben vorhandene IDs, Ziele und Entwürfe unverändert. Dein API Key bleibt in beiden Modi erhalten.</p>
+    <div class="backup-actions"><button type="button" class="btn btn-primary" id="btn-import-apply">Import anwenden</button><button type="button" class="btn btn-secondary" id="btn-import-cancel">Abbrechen</button></div>
+  </dialog>
 
   <!-- Delete Confirmation Modal -->
   <div class="confirm-modal-overlay" id="delete-confirm-modal" aria-hidden="true">
@@ -164,6 +176,8 @@
         </div>
 
         <!-- Meal List -->
+        <section class="insight-card" aria-labelledby="macro-distribution-title"><h2 id="macro-distribution-title">Makro-Verteilung</h2><div id="macro-distribution"></div><p class="settings-note">Anteil an der Makro-Energie: Protein und Kohlenhydrate je 4 kcal/g, Fett 9 kcal/g.</p></section>
+        <section class="insight-card" aria-labelledby="favorites-title"><h2 id="favorites-title">Favoriten · Schnellauswahl</h2><p class="settings-note">Ein Klick trägt die Portion am ausgewählten Tag ein.</p><div id="favorites-list"></div></section>
         <div class="diary-heading"><h2>Deine Mahlzeiten</h2><button type="button" class="text-action" id="btn-quick-add">+ Hinzufügen</button></div><div id="meal-list"></div>
       </div>
     </section>
@@ -198,6 +212,7 @@
         </div>
 
         <!-- Selected Day Detail View -->
+        <section class="insight-card" aria-labelledby="week-analysis-title"><h2 id="week-analysis-title">Wochenanalyse</h2><div id="week-analysis"></div></section>
         <div class="calendar-day-detail-card" id="calendar-day-detail">
           <!-- Dynamically generated day summary & meal list -->
         </div>
@@ -352,7 +367,7 @@
           </div>
           <button type="button" class="btn btn-primary" id="btn-photo-analyze" disabled>Foto analysieren</button>
           <div class="inline-loading" id="photo-loading" role="status" aria-live="polite" style="display:none">
-            <div class="spinner-sm"></div>
+            <div class="nutrition-skeleton" aria-hidden="true"><div>Kalorien<span></span></div><div>Protein<span></span></div><div>Kohlenhydrate<span></span></div><div>Fett<span></span></div></div>
             <span id="photo-loading-text">KI analysiert Foto und Beschreibung…</span>
           </div>
           <button type="button" class="btn btn-secondary mt-8" id="btn-photo-cancel" hidden>Analyse abbrechen</button>
@@ -360,6 +375,7 @@
 
 
           <div id="photo-results" style="display:none">
+            <p id="photo-plausibility" class="plausibility-warning" role="status" hidden>Werte wirken unvollständig – bitte manuell prüfen</p>
             <div class="results-card">
               <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
@@ -426,13 +442,14 @@
             Vorhandene Nährwerte übernehmen
           </button>
           <div class="inline-loading" id="text-loading" role="status" aria-live="polite" style="display:none">
-            <div class="spinner-sm"></div>
+            <div class="nutrition-skeleton" aria-hidden="true"><div>Kalorien<span></span></div><div>Protein<span></span></div><div>Kohlenhydrate<span></span></div><div>Fett<span></span></div></div>
             <span id="text-loading-message">KI schätzt die Nährwerte deiner Mahlzeit…</span>
           </div>
           <button type="button" class="btn btn-secondary mb-16" id="btn-text-cancel" hidden>Analyse abbrechen</button>
           <div class="error-message" id="text-error" role="alert" hidden></div>
 
           <div id="text-results" style="display:none">
+            <p id="text-plausibility" class="plausibility-warning" role="status" hidden>Werte wirken unvollständig – bitte manuell prüfen</p>
             <div class="results-card">
               <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -503,7 +520,9 @@
             <button class="btn btn-secondary hidden" id="btn-barcode-stop">Scanner stoppen</button>
           </div>
 
+          <div class="error-message" id="barcode-error" role="alert" hidden></div>
           <div id="barcode-results" style="display:none">
+            <p id="barcode-plausibility" class="plausibility-warning" role="status" hidden>Werte wirken unvollständig – bitte manuell prüfen</p>
             <div class="barcode-product" id="barcode-product-card">
               <div class="barcode-product-header">
                 <img class="barcode-product-img" id="barcode-product-img" alt="" src="">
@@ -643,6 +662,23 @@
 
         <!-- Data Management -->
         <div class="settings-section">
+          <div class="settings-section-title">Datensicherung auf deinem Gerät</div>
+          <div class="settings-card">
+            <p id="persistence-status" class="settings-note" role="status"></p>
+            <p class="settings-note">Einträge, Ziele, Einstellungen und Eingabeentwürfe werden automatisch in IndexedDB gespeichert. Das Löschen der Browserdaten oder ein Geräteverlust entfernt auch diese Daten.</p>
+            <h3>Automatisches Dateisystem-Backup</h3>
+            <p class="settings-note">Wähle einmalig eine lokale JSON-Datei. Änderungen werden automatisch geschrieben, solange die App geöffnet ist und Schreibzugriff besteht. Nach einem Browserneustart kann eine erneute Freigabe nötig sein.</p>
+            <p id="backup-status" class="settings-note" role="status"></p>
+            <div class="backup-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-backup-select">Backup-Datei auswählen</button><button type="button" class="btn btn-secondary btn-sm" id="btn-backup-resume" hidden>Schreibzugriff freigeben</button><button type="button" class="btn btn-secondary btn-sm" id="btn-backup-disable" hidden>Backup deaktivieren</button></div>
+            <p class="settings-note" id="backup-support"></p>
+            <div class="divider"></div>
+            <div class="backup-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-export-json">Daten exportieren (JSON)</button><button type="button" class="btn btn-secondary btn-sm" id="btn-import-json">Daten importieren (JSON)</button></div>
+            <input type="file" id="import-file" accept=".json,application/json" hidden>
+            <p class="settings-note">JSON-Dateien enthalten Einträge, Favoriten, Ziele und Entwürfe. Dein API Key bleibt ausschließlich im Browserspeicher und wird nicht exportiert. Alle Sicherungsfunktionen sind kostenlos.</p>
+            <p class="settings-note" id="autosave-status" role="status">Änderungen werden automatisch gespeichert.</p>
+          </div>
+        </div>
+        <div class="settings-section">
           <div class="settings-section-title">🗑️ Daten</div>
           <div class="settings-card">
             <button class="btn btn-danger btn-sm mb-8" id="btn-clear-entries">Alle Einträge löschen</button>
@@ -651,7 +687,7 @@
         </div>
 
         <div class="version-info">
-          KCal Tracker · Version 2.0
+          KCal Tracker · Version 3.0
         </div>
       </div>
     </section>
@@ -686,6 +722,7 @@
   <script src="ai-photo.js"></script>
   <script src="scanner.js"></script>
   <script src="app.js"></script>
+  <script src="enhancements.js"></script>
   <script src="android.js"></script>
 </body>
 </html>

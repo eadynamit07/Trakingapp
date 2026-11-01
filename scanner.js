@@ -6,14 +6,21 @@
 const BarcodeScanner = {
   scanner: null,
   isScanning: false,
+  generation: 0,
+  starting: false,
 
   // Initialize the barcode scanner
   async start(containerId, onResult) {
+    if (this.starting) return { success: false, error: 'Die Kamera wird bereits gestartet. Bitte kurz warten.' };
+    this.starting = true;
     if (this.isScanning) {
       await this.stop();
     }
 
+    const generation = ++this.generation;
+    let detected = false;
     try {
+      if (typeof Html5Qrcode === 'undefined') return { success: false, error: 'Scanner nicht geladen. Prüfe deine Internetverbindung und lade die App neu.' };
       // Create scanner instance
       this.scanner = new Html5Qrcode(containerId);
       this.isScanning = true;
@@ -26,9 +33,6 @@ const BarcodeScanner = {
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
         ]
       };
 
@@ -36,11 +40,15 @@ const BarcodeScanner = {
         { facingMode: 'environment' },
         config,
         async (decodedText) => {
+          if (detected || generation !== this.generation) return;
+          detected = true;
           // Barcode detected - stop scanning and look up product
           await this.stop();
+          const lookupGeneration = this.generation;
           onResult({ type: 'scanning', barcode: decodedText });
 
           const product = await this.lookupProduct(decodedText);
+          if (lookupGeneration !== this.generation) return;
           onResult({ type: 'result', ...product });
         },
         (errorMessage) => {
@@ -48,21 +56,28 @@ const BarcodeScanner = {
         }
       );
 
+      if (generation !== this.generation || document.hidden) {
+        await this.stop();
+        return { success: false, error: 'Kamera wurde geschlossen.' };
+      }
+
       return { success: true };
 
     } catch (err) {
+      await this.stop();
       console.error('Scanner error:', err);
       this.isScanning = false;
       return {
         success: false,
         error: 'Barcode-Scanner konnte nicht gestartet werden. Bitte erlaube den Kamera-Zugriff.'
       };
-    }
+    } finally { this.starting = false; }
   },
 
   // Stop the scanner
   async stop() {
-    if (this.scanner && this.isScanning) {
+    this.generation++;
+    if (this.scanner) {
       try {
         await this.scanner.stop();
       } catch (e) {
@@ -79,9 +94,14 @@ const BarcodeScanner = {
 
   // Look up product in Open Food Facts API
   async lookupProduct(barcode) {
+    barcode = String(barcode).trim();
+    if (!/^\d{8}$|^\d{12,14}$/.test(barcode) || !this.validChecksum(barcode)) {
+      return { success: false, barcode, error: 'Ungültiger Barcode. Bitte einen EAN-8, EAN-13, UPC-A oder GTIN-14 Lebensmittelcode scannen.' };
+    }
     try {
       const response = await fetch(
-        `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
+        `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`,
+        { signal: AbortSignal.timeout(15000) }
       );
 
       if (!response.ok) {
@@ -140,6 +160,13 @@ const BarcodeScanner = {
   },
 
   // Calculate nutritional values for a specific amount
+  validChecksum(barcode) {
+    const digits = [...barcode].map(Number);
+    const check = digits.pop();
+    const sum = digits.reverse().reduce((total, value, i) => total + value * (i % 2 === 0 ? 3 : 1), 0);
+    return (10 - sum % 10) % 10 === check;
+  },
+
   calculateForAmount(per100g, amountGrams) {
     const factor = amountGrams / 100;
     return {
